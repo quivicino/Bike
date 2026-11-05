@@ -1,0 +1,337 @@
+#!/usr/bin/env node
+/*
+ * Qui-Bike – scarica da OpenStreetMap (Overpass) i percorsi MTB e in bici (con fondo e difficoltà delle loro vie),
+ * fontanelle, colonnine attrezzi, negozi bici, ricariche e-bike e rifugi di tutta
+ * la Lombardia (più 15 km oltre i confini) e li salva nel sito, divisi in "tessere" da 0,1 gradi.
+ * Dentro la Lombardia l'app legge da qui e non dipende dai server pubblici di OpenStreetMap, spesso lenti o fuori uso.
+ *
+ * Lo esegue GitHub (vedi .github/workflows/pubblica.yml): ogni lunedì riscarica tutto, a blocchi di mezzo grado
+ * per non chiedere troppo in una volta sola a Overpass. I dati NON vengono salvati nel repository, finiscono solo
+ * nel sito pubblicato (come in Qui-Pets): nelle altre pubblicazioni, o se Overpass non risponde, si ricopiano
+ * quelli già pubblicati.
+ *
+ * Per risparmiare spazio:
+ * - ogni percorso è salvato una volta sola, nella tessera dove inizia ("casa"); le altre tessere che attraversa
+ *   ne hanno solo il numero e la tessera di casa, e l'app la scarica quando serve;
+ * - la traccia è semplificata: si tiene un punto ogni circa 5 metri.
+ *
+ * Uso: node aggiorna_percorsi.js   (variabili d'ambiente: SITO, FORZA=1, ESITO, MINUTI_MAX=270, BLOCCHI=21,22 per provare con pochi blocchi)
+ */
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const QT = require("./core.js");
+
+// Lombardia (riquadro che la contiene) e quanto prendere oltre i confini
+const LOMBARDIA = [44.68, 8.50, 46.64, 11.43];
+const MARGINE_KM = 15;
+const BLOCCO = 0.5;          // lato dei blocchi chiesti a Overpass, in gradi
+const PASSO = 0.1;           // lato delle tessere del sito, in gradi (circa 11 × 8 km)
+const METRI_TRA_PUNTI = 5;   // semplificazione della traccia
+const ORE_VALIDI = 6 * 24;   // i dati pubblicati da meno di 6 giorni non si riscaricano (salvo FORZA)
+// Da aumentare quando cambia il formato dei file: i dati pubblicati con un'altra versione si riscaricano subito
+const VERSIONE_DATI = 1;
+const CARTELLA = path.join(__dirname, "dati");
+const USER_AGENT = "Qui-Bike/1.0 (https://github.com/quivicino/Bike)";
+const SERVER = [
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter"
+];
+
+const attendi = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function allarga([s, w, n, e]) {
+  const dLat = MARGINE_KM / 111.32;
+  const dLon = MARGINE_KM / (111.32 * Math.cos(((s + n) / 2) * Math.PI / 180));
+  return [s - dLat, w - dLon, n + dLat, e + dLon].map((x) => +x.toFixed(4));
+}
+
+function blocchi([s, w, n, e]) {
+  const out = [];
+  for (let la = s; la < n; la += BLOCCO) {
+    for (let lo = w; lo < e; lo += BLOCCO) {
+      out.push([la, lo, Math.min(la + BLOCCO, n), Math.min(lo + BLOCCO, e)].map((x) => +x.toFixed(4)));
+    }
+  }
+  return out;
+}
+
+async function scarica(url, opz, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { ...opz, headers: { "User-Agent": USER_AGENT, ...(opz && opz.headers) }, signal: ctrl.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Prova i server a turno (2 giri). Si ferma prima se si supera "scadenza" (ora limite in millisecondi).
+async function daOverpass(query, scadenza) {
+  let ultimo;
+  for (let giro = 0; giro < 2; giro++) {
+    for (const url of SERVER) {
+      const resta = (scadenza || Infinity) - Date.now();
+      if (resta < 60000) throw new Error("tempo massimo superato");
+      try {
+        const r = await scarica(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+          body: "data=" + encodeURIComponent(query)
+        }, Math.min(4 * 60000, resta));
+        const dati = await r.json();
+        if (!Array.isArray(dati.elements)) throw new Error("risposta senza elementi");
+        if (dati.remark && /error|timed out|out of memory|rate/i.test(dati.remark)) throw new Error(dati.remark);
+        console.log(`  ok da ${url}: ${dati.elements.length} elementi`);
+        return dati.elements;
+      } catch (e) {
+        ultimo = e;
+        console.log(`  ${url}: ${e.message}`);
+      }
+    }
+    if (giro === 0) await attendi(30000);
+  }
+  throw new Error("nessun server ha risposto: " + (ultimo && ultimo.message));
+}
+
+// Un percorso che attraversa più blocchi arriva ritagliato in ogni blocco: la traccia di ogni via ha null nei
+// punti fuori dal blocco. Si uniscono le vie punto per punto, così la traccia torna intera.
+function unisciBlocchi(raccolta, elementi) {
+  for (const el of elementi) {
+    if (QT.ePercorso(el)) {
+      let r = raccolta.rel.get(el.id);
+      if (!r) { r = { tags: el.tags, membri: [] }; raccolta.rel.set(el.id, r); }
+      (el.members || []).forEach((m, i) => {
+        if (m.type !== "way") return;
+        const k = i + ":" + m.ref;
+        let v = r.membri.find((x) => x.k === k);
+        if (!v) { v = { k, type: "way", ref: m.ref, role: m.role, geometry: null }; r.membri.push(v); }
+        if (!m.geometry) return;
+        if (!v.geometry) v.geometry = m.geometry.slice();
+        else m.geometry.forEach((g, j) => { if (g && !v.geometry[j]) v.geometry[j] = g; });
+      });
+    } else if (el.type !== "way" || el.center) {
+      const p = QT.compatta(el);
+      if (p) raccolta.punti.set(p.i, p);
+    }
+  }
+  // tag delle vie dei percorsi: servono per il fondo e la difficoltà
+  // (si tengono solo i tag che servono, per non occupare memoria)
+  for (const [id, t] of QT.tagVie(elementi)) {
+    const corto = {};
+    for (const k of ["highway", "surface", "tracktype", "mtb:scale"]) if (t[k]) corto[k] = t[k];
+    raccolta.vie.set(id, corto);
+  }
+}
+
+// Tiene un punto ogni METRI_TRA_PUNTI metri (sempre il primo e l'ultimo)
+function semplifica(l) {
+  if (l.length < 3) return l;
+  const out = [l[0]];
+  for (let i = 1; i < l.length - 1; i++) {
+    const u = out[out.length - 1];
+    if (QT.distanza(u[0], u[1], l[i][0], l[i][1]) >= METRI_TRA_PUNTI) out.push(l[i]);
+  }
+  out.push(l[l.length - 1]);
+  return out;
+}
+
+const nomeTessera = (lat, lon) => `t_${Math.floor(lat / PASSO)}_${Math.floor(lon / PASSO)}.json`;
+
+function salva(raccolta, zona) {
+  const tessere = new Map();
+  const prendi = (t) => { if (!tessere.has(t)) tessere.set(t, { s: [], r: {}, p: [] }); return tessere.get(t); };
+  let nPercorsi = 0, puntiPrima = 0, puntiDopo = 0;
+  for (const [id, r] of raccolta.rel) {
+    const s = QT.compattaSentiero({ type: "relation", id, tags: r.tags, members: r.membri }, raccolta.vie);
+    if (!s) continue;
+    for (const l of s.g) puntiPrima += l.length;
+    s.g = s.g.map(semplifica);
+    for (const l of s.g) puntiDopo += l.length;
+    const casa = nomeTessera(s.g[0][0][0], s.g[0][0][1]);
+    prendi(casa).s.push(s);
+    const attraversate = new Set();
+    for (const l of s.g) for (const [la, lo] of l) attraversate.add(nomeTessera(la, lo));
+    attraversate.delete(casa);
+    for (const t of attraversate) prendi(t).r[s.i] = casa;
+    nPercorsi++;
+  }
+  for (const p of raccolta.punti.values()) prendi(nomeTessera(p.la, p.lo)).p.push(p);
+  console.log(`Traccia semplificata: ${puntiPrima} → ${puntiDopo} punti`);
+
+  fs.rmSync(CARTELLA, { recursive: true, force: true });
+  fs.mkdirSync(CARTELLA, { recursive: true });
+  let byte = 0;
+  for (const [t, cont] of tessere) {
+    const testo = JSON.stringify(cont);
+    byte += testo.length;
+    fs.writeFileSync(path.join(CARTELLA, t), testo);
+  }
+  const indice = {
+    versioneDati: VERSIONE_DATI,
+    passo: PASSO,
+    zona: LOMBARDIA,        // dentro questo riquadro l'app usa i dati del sito
+    scaricata: zona,
+    aggiornato: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    percorsi: nPercorsi,
+    punti: raccolta.punti.size,
+    tessere: [...tessere.keys()].sort(),
+    fonte: "© OpenStreetMap contributors (ODbL)",
+    licenza: "Open Database License (ODbL) 1.0",
+    licenzaUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+    generatoDa: "https://github.com/quivicino/Bike"
+  };
+  scriviIndice(indice);
+  console.log(`Salvati ${nPercorsi} percorsi e ${raccolta.punti.size} punti in ${tessere.size} tessere (${(byte / 1048576).toFixed(1)} MB)`);
+}
+
+const scriviIndice = (indice) => fs.writeFileSync(path.join(CARTELLA, "indice.json"), JSON.stringify(indice, null, 1));
+
+// Scarica i blocchi uno dopo l'altro. Un blocco che non risponde viene saltato; superato il tempo massimo
+// (MINUTI_MAX) si saltano i rimanenti. Restituisce i blocchi mancanti.
+async function scaricaTutto() {
+  const scadenza = Date.now() + (+process.env.MINUTI_MAX || 270) * 60000;
+  const zona = allarga(LOMBARDIA);
+  let lista = blocchi(zona);
+  // per provare: BLOCCHI=21,22 scarica solo quei blocchi
+  if (process.env.BLOCCHI) lista = process.env.BLOCCHI.split(",").map((i) => lista[+i]).filter(Boolean);
+  const raccolta = { rel: new Map(), punti: new Map(), vie: new Map() };
+  const falliti = [];
+  for (const [i, b] of lista.entries()) {
+    console.log(`Blocco ${i + 1} di ${lista.length}: ${b.join(", ")}`);
+    try {
+      unisciBlocchi(raccolta, await daOverpass(QT.queryOverpass(b, 180), scadenza));
+    } catch (e) {
+      console.log(`  blocco saltato: ${e.message}`);
+      falliti.push(b);
+    }
+  }
+  if (falliti.length === lista.length) throw new Error("nessun blocco scaricato");
+  salva(raccolta, zona);
+  if (falliti.length) console.log(`Blocchi mancanti: ${falliti.length} di ${lista.length}`);
+  return falliti;
+}
+
+// Per i blocchi non scaricati rimette le tessere della pubblicazione precedente (se c'è ed è della stessa versione)
+async function riempiBuchi(falliti, sito) {
+  const { base, indice: vecchio } = await indicePubblicato(sito);
+  if (vecchio.versioneDati !== VERSIONE_DATI) throw new Error("i dati pubblicati sono di un'altra versione");
+  const dentro = (t) => {
+    const [, i, j] = t.match(/^t_(-?\d+)_(-?\d+)\.json$/).map(Number);
+    const la = (i + 0.5) * PASSO, lo = (j + 0.5) * PASSO;
+    return falliti.some(([s, w, n, e]) => la >= s && la < n && lo >= w && lo < e);
+  };
+  const indice = JSON.parse(fs.readFileSync(path.join(CARTELLA, "indice.json"), "utf8"));
+  const tessere = new Set(indice.tessere);
+  let n = 0;
+  for (const t of vecchio.tessere.filter(dentro)) {
+    try {
+      const r = await scarica(base + t, {}, 60000);
+      fs.writeFileSync(path.join(CARTELLA, t), Buffer.from(await r.arrayBuffer()));
+      tessere.add(t);
+      n++;
+    } catch (e) {
+      console.log(`  ${t}: ${e.message}`);
+    }
+  }
+  indice.tessere = [...tessere].sort();
+  scriviIndice(indice);
+  console.log(`Rimesse ${n} tessere della pubblicazione del ${vecchio.aggiornato} nei blocchi mancanti`);
+}
+
+// ---------- Dati già pubblicati ----------
+async function indicePubblicato(sito) {
+  if (!sito) throw new Error("indirizzo del sito non indicato");
+  const base = sito.replace(/\/?$/, "/") + "dati/";
+  const r = await scarica(base + "indice.json", {}, 20000);
+  return { base, indice: await r.json() };
+}
+
+async function recuperaDalSito(sito) {
+  const { base, indice } = await indicePubblicato(sito);
+  if (indice.versioneDati !== VERSIONE_DATI) throw new Error("i dati pubblicati sono di un'altra versione");
+  console.log(`Ricopio i dati già pubblicati da ${base} (aggiornati ${indice.aggiornato}) …`);
+  fs.rmSync(CARTELLA, { recursive: true, force: true });
+  fs.mkdirSync(CARTELLA, { recursive: true });
+  const coda = indice.tessere.slice();
+  async function lavoratore() {
+    while (coda.length) {
+      const t = coda.shift();
+      let ok = false;
+      for (let i = 0; i < 3 && !ok; i++) {
+        try {
+          const r = await scarica(base + t, {}, 60000);
+          fs.writeFileSync(path.join(CARTELLA, t), Buffer.from(await r.arrayBuffer()));
+          ok = true;
+        } catch (e) {
+          console.log(`  ${t}: ${e.message}`);
+          await attendi(3000);
+        }
+      }
+      if (!ok) throw new Error(`tessera ${t} non recuperata`);
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, lavoratore));
+  scriviIndice(indice);
+  console.log(`  ricopiate ${indice.tessere.length} tessere`);
+}
+
+// Riga "stato;aggiornato;percorsi" per la notifica sull'iPhone:
+// nuovi = riscaricati, parziale = riscaricati in parte (alcuni blocchi non hanno risposto),
+// recenti = ricopiati perché non serviva riscaricarli, ripiego = Overpass non ha risposto
+function scriviEsito(stato) {
+  if (!process.env.ESITO) return;
+  let indice = {};
+  try { indice = JSON.parse(fs.readFileSync(path.join(CARTELLA, "indice.json"), "utf8")); } catch (e) { /* nessun indice */ }
+  fs.writeFileSync(process.env.ESITO, `${stato};${indice.aggiornato || ""};${indice.percorsi || ""}\n`);
+}
+
+async function main() {
+  const sito = process.env.SITO;
+  const forza = process.env.FORZA === "1" || process.env.FORZA === "true";
+  if (!forza) {
+    try {
+      const { indice } = await indicePubblicato(sito);
+      const ore = (Date.now() - Date.parse(indice.aggiornato)) / 3600000;
+      if (indice.versioneDati !== VERSIONE_DATI) {
+        console.log("I dati pubblicati sono di una versione precedente: li riscarico da Overpass.");
+      } else if (ore < ORE_VALIDI) {
+        console.log(`Dati pubblicati ${ore.toFixed(1)} ore fa: non serve riscaricarli.`);
+        await recuperaDalSito(sito);
+        scriviEsito("recenti");
+        return;
+      }
+    } catch (e) {
+      console.log(`Dati pubblicati non disponibili (${e.message}): li scarico da Overpass.`);
+    }
+  }
+  let falliti;
+  try {
+    falliti = await scaricaTutto();
+  } catch (e) {
+    console.log(`Overpass non disponibile: ${e.message}`);
+    try {
+      await recuperaDalSito(sito);
+      scriviEsito("ripiego");
+    } catch (e2) {
+      console.log(`Nessun dato disponibile: ${e2.message}. L'app userà Overpass direttamente.`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (falliti.length) {
+    try {
+      await riempiBuchi(falliti, sito);
+    } catch (e) {
+      console.log(`Blocchi mancanti lasciati vuoti (${e.message}): lì l'app userà Overpass direttamente.`);
+    }
+  }
+  scriviEsito(falliti.length ? "parziale" : "nuovi");
+}
+
+if (require.main === module) main();
+else module.exports = { LOMBARDIA, allarga, blocchi, unisciBlocchi, semplifica, salva, riempiBuchi };

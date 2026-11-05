@@ -1,0 +1,93 @@
+name: Pubblica sito e aggiorna percorsi
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # ogni lunedì alle 3:37 (ora UTC): riscarica percorsi MTB e bici, fontanelle e officine di tutta la Lombardia
+    - cron: "37 3 * * 1"
+  workflow_dispatch:         # pulsante "Run workflow": riscarica subito i dati da OpenStreetMap
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    env:
+      # Notifica sull'iPhone con l'app ntfy: il nome del canale sta nel secret NTFY_TOPIC.
+      # Se il secret non c'è, la notifica viene saltata.
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      ESITO: /tmp/esito.txt
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # I dati non stanno nel repository: il lunedì (o col pulsante) si riscaricano da OpenStreetMap,
+      # negli altri casi si ricopiano quelli già pubblicati. Se Overpass non risponde restano quelli vecchi.
+      - name: Scarica i percorsi della Lombardia da OpenStreetMap
+        id: dati
+        timeout-minutes: 300   # lo script si ferma da solo dopo 270 minuti e salva quello che ha
+        continue-on-error: true   # senza dati, l'app chiede i percorsi direttamente dal telefono
+        env:
+          SITO: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          FORZA: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+        run: node aggiorna_percorsi.js
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
+
+      # ✅ dati riscaricati · ⚠️ in parte · ❌ qualcosa è andato storto · ⚠️ Overpass non ha risposto e sono rimasti i dati vecchi
+      - name: Notifica sull'iPhone
+        if: always() && env.NTFY_TOPIC != ''
+        env:
+          STATO_JOB: ${{ job.status }}
+          STATO_DATI: ${{ steps.dati.outcome }}
+          LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          try:
+              stato, quando, n = open(os.environ["ESITO"], encoding="utf-8").read().strip().split(";")
+          except Exception:
+              stato, quando, n = "", "", ""
+          try:
+              giorno = datetime.fromisoformat(quando.replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Rome")).strftime("%d/%m")
+          except Exception:
+              giorno = "?"
+          msg = None
+          if os.environ["STATO_JOB"] != "success" or os.environ["STATO_DATI"] != "success" or not stato:
+              msg = ("Aggiornamento fallito", "Tocca per vedere cosa è successo su GitHub.", "x", 4)
+          elif stato == "nuovi":
+              msg = ("Percorsi aggiornati", f"Riscaricati da OpenStreetMap: {n} percorsi in Lombardia.", "white_check_mark", 3)
+          elif stato == "parziale":
+              msg = ("Percorsi aggiornati in parte", f"{n} percorsi: alcune zone non hanno risposto e restano quelle vecchie.", "warning", 3)
+          elif stato == "ripiego":
+              msg = ("Percorsi non aggiornati", f"OpenStreetMap non ha risposto: il sito resta al {giorno}.", "warning", 4)
+          if msg:
+              titolo, testo, tag, prio = msg
+              corpo = {"topic": os.environ["NTFY_TOPIC"], "title": "Bike: " + titolo,
+                       "message": testo, "tags": [tag], "priority": prio, "click": os.environ["LINK"]}
+              req = urllib.request.Request("https://ntfy.sh/", data=json.dumps(corpo).encode(),
+                                           headers={"Content-Type": "application/json"})
+              urllib.request.urlopen(req, timeout=30).read()
+              print("Notifica inviata:", titolo, "-", testo)
+          else:
+              print("Niente da notificare")
+          PY

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Qui-Bike</title>
+  <meta name="description" content="Percorsi MTB e gravel con difficoltà, fondo, lunghezza e dislivello, fontanelle e officine bici vicino a te, da OpenStreetMap">
+  <meta name="theme-color" content="#9a3412">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="favicon-64.png" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Qui-Bike">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand" aria-label="Qui-Bike">
+        <img class="logo" src="icon-192.png?v=1" alt="" width="50" height="50">
+        <span class="brand-name">Qui-Bike</span>
+      </div>
+      <form class="cerca" id="form-cerca" role="search">
+        <label for="cerca-indirizzo" class="sr-only">Cerca un luogo</label>
+        <input id="cerca-indirizzo" type="search" placeholder="Cerca…" autocomplete="off" enterkeyhint="search">
+      </form>
+      <div class="carb" id="cat-box">
+        <button class="cat-btn" id="categoria" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="cat-menu">
+          <span class="sr-only">Cosa mostrare: </span><span id="categoria-testo">Cosa mostrare</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="cat-menu" id="cat-menu" role="group" aria-label="Cosa mostrare: puoi sceglierne più di uno" hidden>
+          <p class="cat-titolo">Tipo di percorso</p>
+          <div id="cat-tipi"></div>
+          <p class="cat-titolo">Difficoltà</p>
+          <div id="cat-sentieri"></div>
+          <p class="cat-titolo">Punti</p>
+          <div id="cat-voci"></div>
+          <button class="cat-ok" id="cat-ok" type="button">Fatto</button>
+        </div>
+      </div>
+      <label class="raggio">
+        <span class="sr-only">Raggio</span>
+        <select id="raggio">
+          <option value="2000">2 km</option>
+          <option value="5000">5 km</option>
+          <option value="10000">10 km</option>
+          <option value="15000" selected>15 km</option>
+          <option value="25000">25 km</option>
+        </select>
+      </label>
+    </header>
+
+    <main class="corpo">
+      <div id="mappa" class="mappa" role="application" aria-label="Mappa dei percorsi in bici, fontanelle e officine"></div>
+
+      <div class="guida-rotta" id="guida-rotta" role="status" aria-live="polite" hidden>
+        <div class="gr-bussola" aria-hidden="true">
+          <span class="gr-nord">N</span>
+          <svg id="guida-freccia" class="gr-freccia" viewBox="0 0 24 24" width="40" height="40"><path d="M12 2 19 20 12 16 5 20Z" fill="currentColor"/></svg>
+        </div>
+        <div class="gr-testi">
+          <b id="guida-velocita">– km/h</b>
+          <span id="guida-testo"></span>
+        </div>
+        <button type="button" class="gr-esci" id="guida-esci" aria-label="Esci dalla navigazione sul percorso">Esci</button>
+      </div>
+
+      <div class="fab-col">
+        <button class="fab" id="btn-centra" type="button" title="Torna alla mia posizione" aria-label="Torna alla mia posizione">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <button class="fab fab-nero" id="btn-elenco" type="button" title="Elenco dei percorsi e dei punti vicini" aria-label="Apri l'elenco dei percorsi e dei punti vicini" aria-controls="pannello" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.6" fill="currentColor"/><circle cx="4.5" cy="12" r="1.6" fill="currentColor"/><circle cx="4.5" cy="18" r="1.6" fill="currentColor"/></svg>
+          <span class="badge" id="badge-elenco" hidden></span>
+        </button>
+        <button class="fab" id="btn-aggiorna" type="button" title="Aggiorna" aria-label="Aggiorna i dati">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="fab-azioni">
+        <button class="fab fab-officina" id="btn-officina" type="button" title="Attrezzi o officina più vicina" aria-label="Mostra la colonnina attrezzi o l'officina bici più vicina">
+          <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M14.7 3.3a5 5 0 0 0-5.9 6.6L3.4 15.3a2 2 0 0 0 2.8 2.8l5.4-5.4a5 5 0 0 0 6.6-5.9l-3 3-2.4-.6-.6-2.4Z" fill="currentColor"/></svg>
+        </button>
+        <button class="fab fab-acqua" id="btn-acqua" type="button" title="La fontanella più vicina" aria-label="Mostra la fontanella più vicina">
+          <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 2.5C9 7 5.8 10.6 5.8 14.6a6.2 6.2 0 0 0 12.4 0C18.2 10.6 15 7 12 2.5Z" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </main>
+
+    <section class="pannello" id="pannello" aria-label="Percorsi e punti vicini" hidden>
+      <header class="pannello-testa">
+        <h2>Qui-Bike</h2>
+        <a class="condividi" id="btn-condividi" href="https://wa.me/" target="_blank" rel="noopener" aria-label="Condividi l'app con un amico su WhatsApp">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.6 8.4c.2-.5.5-.5.8-.5h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.6l-.5.6c-.1.1-.2.3 0 .5.6 1 1.4 1.8 2.4 2.4.2.1.4.1.5 0l.6-.7c.2-.2.4-.2.6-.1l1.6.7c.3.1.4.3.4.5v.5c0 .3-.1.7-.6.9-.5.3-1.4.5-2.6.1a9 9 0 0 1-4.6-4.3c-.6-1.2-.4-2.2-.2-2.7Z" fill="currentColor"/></svg>
+          <span class="condividi-testo">Condividi</span>
+        </a>
+        <button class="btn-help" id="btn-guida" type="button" aria-label="Apri la guida all'app" aria-controls="guida" aria-expanded="false">HELP</button>
+        <button class="chiudi" id="btn-chiudi" type="button" aria-label="Chiudi l'elenco e torna alla mappa">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <div class="pannello-corpo">
+        <div class="stato" id="stato" role="status" aria-live="polite">Cerco la tua posizione…</div>
+
+        <a class="emergenza" href="tel:112">Incidente o emergenza? <b>Chiama il 112</b></a>
+
+        <button class="btn-installa" id="btn-installa" type="button" hidden>
+          <img src="icon-192.png?v=1" alt="" width="36" height="36">
+          <span><b>Installa l'app</b><small>Metti l'icona di Qui-Bike sulla schermata Home</small></span>
+        </button>
+
+        <label class="auto" for="auto-refresh">
+          <span>AUTO-REFRESH</span>
+          <span class="occhio" id="occhio" hidden title="Schermo sempre acceso"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></span>
+          <select id="auto-refresh">
+            <option value="0" selected>0 · spento</option>
+            <option value="30">30 s</option>
+            <option value="60">60 s</option>
+            <option value="120">120 s</option>
+          </select>
+        </label>
+
+        <label class="auto" for="suoni">
+          <span>SUONI</span>
+          <select id="suoni">
+            <option value="1" selected>Attivi</option>
+            <option value="0">Spenti</option>
+          </select>
+        </label>
+
+        <label class="auto" for="sfondo">
+          <span>MAPPA</span>
+          <select id="sfondo">
+            <option value="topo" selected>Topografica</option>
+            <option value="stradale">Stradale</option>
+            <option value="grande">Stradale, nomi grandi</option>
+            <option value="satellite">Satellite</option>
+          </select>
+        </label>
+
+        <label class="auto" for="lettura" id="riga-lettura">
+          <span>LETTURA VOCALE</span>
+          <select id="lettura">
+            <option value="1">Attiva</option>
+            <option value="0" selected>Spenta</option>
+          </select>
+        </label>
+
+        <div class="sommario" id="sommario">
+          <div class="kpi kpi-osm"><b id="k-n">–</b><span>percorsi<br>nel raggio</span></div>
+          <div class="kpi kpi-rif"><b id="k-rif">–</b><span>attrezzi e<br>officine</span></div>
+          <div class="kpi kpi-acqua"><b id="k-acqua">–</b><span>fontanella<br>più vicina</span></div>
+        </div>
+
+        <div class="filtri" role="group" aria-label="Ordine e filtri">
+          <button class="chip ordine" type="button" data-ordine="distanza" aria-pressed="true">Per distanza</button>
+          <button class="chip ordine" type="button" data-ordine="nome" aria-pressed="false">Per nome</button>
+          <button class="chip ordine" type="button" data-ordine="lunghezza" aria-pressed="false">Per lunghezza</button>
+          <span class="sep" aria-hidden="true"></span>
+          <button class="chip filtro" type="button" data-filtro="anello" aria-pressed="false">Solo ad anello</button>
+          <button class="chip filtro" type="button" data-filtro="aperti" aria-pressed="false">Aperti ora</button>
+        </div>
+
+        <ol class="lista" id="lista"></ol>
+
+        <footer class="fonti">
+          Dati: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> e chi contribuisce
+          (licenza ODbL); mappa topografica © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA);
+          quote del terreno da <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (Copernicus DEM).
+          Le informazioni sono inserite da volontari e possono essere incomplete o non aggiornate: prima di partire controlla
+          meteo e stato dei percorsi, e rispetta i divieti di transito per le bici. Se trovi un errore puoi correggerlo su OpenStreetMap.
+        </footer>
+        <p class="versione" id="elenco-versione"></p>
+      </div>
+    </section>
+
+    <section class="pannello scheda" id="scheda" aria-labelledby="scheda-titolo" hidden>
+      <header class="pannello-testa">
+        <h2 id="scheda-titolo">Scheda</h2>
+        <button class="chiudi" id="btn-chiudi-scheda" type="button" aria-label="Chiudi la scheda e torna alla mappa">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="pannello-corpo scheda-corpo" id="scheda-contenuto"></div>
+    </section>
+
+    <section class="pannello guida" id="guida" aria-label="Guida all'app" hidden>
+      <header class="pannello-testa">
+        <h2>Guida</h2>
+        <button class="chiudi" id="btn-chiudi-guida" type="button" aria-label="Chiudi la guida e torna alla mappa">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <div class="pannello-corpo guida-corpo">
+        <p class="g-intro"><b>Qui-Bike</b> ti mostra i percorsi in mountain bike e in gravel vicino a te, colorati secondo la difficoltà,
+          con il tipo di fondo (asfalto, sterrato, sentiero), lunghezza, dislivello e tempo in bici, e poi fontanelle, colonnine
+          con gli attrezzi, officine bici e ricariche per e-bike. I dati vengono da OpenStreetMap, la mappa libera fatta da volontari.</p>
+        <p class="g-avviso">In caso di incidente chiama il <a href="tel:112">112</a>. Porta sempre casco, acqua, camera d'aria e pompa.</p>
+        <p class="g-versione" id="guida-versione"></p>
+
+        <nav class="g-indice" aria-label="Argomenti">
+          <a href="#g-tipi-sez">Tipi e fondo</a><a href="#g-difficolta">Difficoltà</a><a href="#g-scheda">Scheda</a><a href="#g-mappa">Segnaposto</a>
+          <a href="#g-pulsanti">Pulsanti</a><a href="#g-elenco">Elenco e impostazioni</a><a href="#g-dati">I dati</a><a href="#g-consigli">Consigli</a>
+        </nav>
+
+        <section id="g-tipi-sez">
+          <h3>Tipo di percorso e fondo</h3>
+          <p>L'app guarda ogni via del percorso su OpenStreetMap (strada, carrareccia, sentiero, tipo di superficie) e calcola
+            quanta parte è su <b>asfalto</b>, su <b>sterrato e ghiaia</b> e su <b>sentiero</b>. Da qui il tipo di percorso:</p>
+          <ul class="g-lista" id="g-tipi"></ul>
+          <p>Nell'elenco e nella scheda una <b>barra colorata</b> mostra le proporzioni del fondo:</p>
+          <div class="fondo-legenda g-fondi" id="g-fondi"></div>
+        </section>
+
+        <section id="g-difficolta">
+          <h3>Difficoltà</h3>
+          <p>Ogni percorso è una linea colorata secondo la difficoltà tecnica, come le piste: verde, blu, rosso, nero.
+            Viene dalla <b>scala MTB</b> scritta su OpenStreetMap (da S0 a S5) per il percorso o per i suoi tratti di sentiero:
+            conta il tratto più difficile lungo almeno 300 metri.</p>
+          <ul class="g-lista" id="g-diff"></ul>
+          <p>Un percorso senza sentieri (solo strade e sterrate) è <b>facile</b> anche se la difficoltà non è scritta:
+            nella scheda c'è scritto <i>stimata</i>. La difficoltà non dice quanto è faticoso: per quello guarda dislivello e pendenza.</p>
+        </section>
+
+        <section id="g-scheda">
+          <h3>La scheda del percorso</h3>
+          <p>Tocca la linea o il cartello col numero: il percorso si evidenzia e compare un fumetto con nome, tipo, difficoltà e lunghezza.
+            Tocca un punto vuoto della mappa per chiuderlo. Tocca il fumetto per aprire la <b>scheda</b>, una pagina a tutto schermo:
+            tipo, difficoltà, fondo, lunghezza, dislivello, quota minima e massima, <b>pendenza massima</b> (su tratti di almeno 200 m),
+            tempo in bici e profilo altimetrico. Intanto la mappa inquadra il <b>percorso intero</b> e lo evidenzia.</p>
+          <p>Chiudendo la scheda (X o <b>Pedala sul percorso</b>) in alto a sinistra compaiono la tua <b>velocità</b> e una <b>freccia</b>
+            (il nord è in alto, come sulla mappa): se sei lontano dal percorso la freccia punta al suo punto più vicino, che una
+            linea tratteggiata collega a te; quando ci sei sopra punta lungo il percorso, nel senso in cui vai.
+            Il riquadro resta finché non tocchi <b>Esci</b>. <b>In auto alla partenza</b> apre il navigatore verso l'estremità più vicina a te.</p>
+          <p>Il <b>tempo in bici</b> è una stima per un ciclista medio allenato, con bici muscolare e senza soste: 12 km/h su sentiero,
+            16 su sterrato, 20 su asfalto, più un'ora ogni 500 metri di salita. Il <b>dislivello</b> è quello scritto su OpenStreetMap;
+            quando manca l'app lo calcola dalle quote del terreno (indicato come <i>stima</i>).</p>
+          <p><b>Scarica il percorso</b>: scegli il formato (GPX va bene per Komoot, OsmAnd, Garmin e Wahoo; KML per Google Earth)
+            e la direzione, poi tocca <b>Salva il file</b>: finisce nei Download dell'app File. Da lì toccalo (o tienilo premuto,
+            Condividi) e scegli l'app. Il tracciato intero viene da Waymarked Trails; se non risponde, il file usa la traccia dell'app.</p>
+          <p><b>Street View agli estremi</b> apre Google Maps con la foto sferica più vicina alla partenza e all'arrivo.
+            <b>Invia Percorso con WhatsApp</b> manda un link: chi lo apre vede Qui-Bike con la stessa mappa e la scheda dello stesso percorso.</p>
+        </section>
+
+        <section id="g-mappa">
+          <h3>I segnaposto sulla mappa</h3>
+          <ul class="g-lista" id="g-legenda"></ul>
+          <ul class="g-lista">
+            <li><span class="g-segno"><span class="io"></span></span><div><b>Punto azzurro</b>: sei tu. Il <b>cono azzurro</b> mostra dove è rivolto il telefono (su iPhone tocca il pulsante della posizione e consenti <i>Movimento e orientamento</i>). Il <b>cerchio tratteggiato</b> è il raggio di ricerca.</div></li>
+          </ul>
+          <p>Un pallino verde sul segnaposto vuol dire <b>aperto adesso</b>, uno rosso <b>chiuso</b>, secondo gli orari su OpenStreetMap.
+            Tocca un segnaposto per aprire la sua <b>scheda</b>: nome, servizi, orari, telefono, sito e distanza.
+            Nella scheda di una <b>fontanella</b> puoi scattare una foto: resta salvata solo sul tuo telefono.</p>
+        </section>
+
+        <section id="g-pulsanti">
+          <h3>I pulsanti</h3>
+          <ul class="g-lista">
+            <li><span class="g-segno"><span class="g-barra">Cerca un luogo…</span></span><div><b>Cerca</b>: scrivi un paese o una valle per vedere i percorsi lì invece che intorno a te.</div></li>
+            <li><span class="g-segno"><span class="g-barra corto">Percorsi</span></span><div><b>Cosa mostrare</b>: spunta i tipi di percorso (MTB, gravel, strada), le difficoltà e i tipi di punti che vuoi vedere. Un percorso compare se sono spuntati sia il suo tipo sia la sua difficoltà.</div></li>
+            <li><span class="g-segno"><span class="g-barra corto">15 km</span></span><div><b>Raggio</b>: quanto lontano cercare, da 2 a 25 km.</div></li>
+            <li><span class="g-segno"><span class="g-fab"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/></svg></span></span><div><b>Posizione</b>: riporta la mappa su di te e la fa seguire mentre ti sposti. All'avvio l'app riparte dall'ultima zona che guardavi.</div></li>
+            <li><span class="g-segno"><span class="g-fab nero"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.6" fill="currentColor"/><circle cx="4.5" cy="12" r="1.6" fill="currentColor"/><circle cx="4.5" cy="18" r="1.6" fill="currentColor"/></svg></span></span><div><b>Elenco</b>: apre la pagina con tutti i percorsi e i punti vicini e le impostazioni.</div></li>
+            <li><span class="g-segno"><span class="g-fab"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span><div><b>Aggiorna</b>: riscarica subito i dati da OpenStreetMap.</div></li>
+            <li><span class="g-segno"><span class="btn-help g-help">HELP</span></span><div><b>HELP</b> (in alto nella pagina Elenco, accanto alla X): apre questa pagina.</div></li>
+            <li><span class="g-segno"><span class="g-fab officina"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M14.7 3.3a5 5 0 0 0-5.9 6.6L3.4 15.3a2 2 0 0 0 2.8 2.8l5.4-5.4a5 5 0 0 0 6.6-5.9l-3 3-2.4-.6-.6-2.4Z" fill="currentColor"/></svg></span></span><div><b>Attrezzi</b>: porta la mappa sulla colonnina attrezzi o sull'officina aperta più vicina.</div></li>
+            <li><span class="g-segno"><span class="g-fab acqua"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5C9 7 5.8 10.6 5.8 14.6a6.2 6.2 0 0 0 12.4 0C18.2 10.6 15 7 12 2.5Z" fill="currentColor"/></svg></span></span><div><b>Fontanella</b>: porta la mappa sulla fontanella di acqua potabile più vicina.</div></li>
+          </ul>
+          <p>Per ingrandire o rimpicciolire la mappa usa due dita.</p>
+        </section>
+
+        <section id="g-elenco">
+          <h3>La pagina Elenco e le impostazioni</h3>
+          <p>In alto una riga dice cosa sta facendo l'app e quando sono stati scaricati i dati.</p>
+          <dl class="g-def">
+            <dt>AUTO-REFRESH</dt>
+            <dd>Ogni 30, 60 o 120 secondi l'app torna sulla tua posizione e ricalcola percorsi e punti vicini. <b>0</b> la spegne: a ogni avvio è spenta.
+              Finché è attivo lo schermo resta acceso (compare l'<b>occhio verde</b>): utile col telefono sul manubrio.</dd>
+            <dt>SUONI</dt>
+            <dd>Un <b>bing</b> a ogni aggiornamento; <b>due note che scendono</b> se i dati non si possono scaricare.</dd>
+            <dt>MAPPA</dt>
+            <dd><b>Topografica</b> con curve di livello (OpenTopoMap); <b>Stradale</b> la cartina di OpenStreetMap, anche con i <b>nomi grandi</b>; <b>Satellite</b> le foto aeree.</dd>
+            <dt>LETTURA VOCALE</dt>
+            <dd>Quando tocchi un percorso o un segnaposto, l'app legge ad alta voce nome, tipo, difficoltà, lunghezza e fondo. A ogni avvio è spenta.</dd>
+          </dl>
+          <p>Sotto trovi quanti percorsi ci sono nel raggio, quante colonnine e officine e quanto dista la fontanella più vicina,
+            poi l'<b>elenco</b> ordinato <b>per distanza</b>, <b>per nome</b> o <b>per lunghezza</b>. <b>Solo ad anello</b> tiene i percorsi
+            che tornano al punto di partenza; <b>Aperti ora</b> nasconde i punti che non risultano aperti. Tocca una riga per vederla sulla mappa.</p>
+        </section>
+
+        <section id="g-dati">
+          <h3>Da dove vengono i dati</h3>
+          <ul class="g-punti">
+            <li>Percorsi e punti vengono da <b>OpenStreetMap</b>: sono i percorsi segnalati come itinerari MTB o ciclabili.
+              Per tutta la <b>Lombardia</b> (e 15 km oltre i confini) ogni lunedì il sito li scarica e li tiene pronti; fuori dalla Lombardia
+              l'app li chiede ogni volta a OpenStreetMap, e può volerci più di un minuto.</li>
+            <li>Gli ultimi dati scaricati restano sul telefono: senza campo l'app usa quelli.</li>
+            <li>Il <b>fondo</b> e la <b>difficoltà</b> dipendono da quanto sono descritte le singole vie: dove mancano, la barra mostra il grigio <i>fondo non indicato</i>.</li>
+            <li>Le <b>quote</b> per dislivello, pendenza e profilo vengono dal modello del terreno Copernicus (circa 30 metri di precisione, tramite Open-Meteo): i numeri sono indicativi.</li>
+            <li>Se trovi un errore puoi correggerlo tu su openstreetmap.org.</li>
+          </ul>
+        </section>
+
+        <section id="g-consigli">
+          <h3>Consigli</h3>
+          <ul class="g-punti">
+            <li>In caso di <b>incidente</b> chiama il <b>112</b>. Non uscire da solo sui percorsi difficili e di' a qualcuno dove vai.</li>
+            <li>Sui sentieri dai sempre la <b>precedenza a chi va a piedi</b> e rispetta i divieti: in alcuni tratti le bici non sono ammesse.</li>
+            <li>Scegli percorsi adatti alla tua preparazione e controlla il <b>meteo</b>: col bagnato radici e rocce diventano molto più difficili.</li>
+            <li>Metti l'icona sulla schermata Home: nella pagina Elenco tocca <b>Installa l'app</b> e segui i passaggi.</li>
+            <li>Apri l'app <b>prima di partire</b>, quando hai ancora campo: i dati restano salvati sul telefono.</li>
+            <li>Ti è utile? In alto nella pagina Elenco tocca <b>Condividi</b>: si apre WhatsApp con un messaggio già scritto e il link all'app.</li>
+            <li>Il numero di <b>versione</b>, nell'ultima riga della pagina Elenco, ti dice se hai l'ultimo aggiornamento.</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <section class="installa" id="installa" role="dialog" aria-modal="false" aria-labelledby="installa-titolo" hidden>
+    <div class="installa-testa">
+      <img src="icon-192.png?v=1" alt="" width="52" height="52">
+      <div>
+        <h2 id="installa-titolo">Metti Qui-Bike sul telefono</h2>
+        <p>Con l'icona sulla schermata Home la apri con un tocco, come un'app, a tutto schermo e anche senza campo.</p>
+      </div>
+    </div>
+    <div class="installa-corpo" id="installa-corpo"></div>
+    <div class="installa-azioni">
+      <button class="installa-dopo" id="installa-dopo" type="button">Più tardi</button>
+      <button class="installa-ok" id="installa-ok" type="button">Installa</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="config.js?v=1"></script>
+  <script src="core.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+  <script src="installa.js?v=1"></script>
+
+  <!-- Statistiche d'uso anonime, senza cookie: https://quibike.goatcounter.com
+       I dispositivi del team (segnati una volta aprendo l'app con ?gc_team=nome-dispositivo,
+       tolti con ?gc_team=off) contano a parte su https://quivicino-team.goatcounter.com -->
+  <script>
+    (function () {
+      var endpoint = "https://quibike.goatcounter.com/count";
+      try {
+        var q = new URLSearchParams(location.search).get("gc_team");
+        if (q === "off") { localStorage.removeItem("gc_team"); alert("Questo dispositivo ora conta come un visitatore normale."); }
+        else if (q) {
+          q = q.toLowerCase().replace(/[^a-z0-9-]/g, "");
+          if (q) { localStorage.setItem("gc_team", q); alert("Dispositivo segnato come \u201c" + q + "\u201d: le visite contano a parte."); }
+        }
+        var team = localStorage.getItem("gc_team");
+        if (team) {
+          endpoint = "https://quivicino-team.goatcounter.com/count";
+          window.goatcounter = { path: function (p) { return "/" + team + p.split("?")[0]; } };
+        }
+      } catch (e) {}
+      var s = document.createElement("script");
+      s.async = true;
+      s.src = "https://gc.zgo.at/count.js";
+      s.setAttribute("data-goatcounter", endpoint);
+      document.head.appendChild(s);
+    })();
+  </script>
+</body>
+</html>
