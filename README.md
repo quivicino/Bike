@@ -44,11 +44,11 @@ pubblica il sito su `https://quivicino.github.io/Bike/`.
 
 ## File
 
-- `index.html`, `style.css`: interfaccia (stessi stili di Qui-Trekking, barra color terra)
+- `index.html`, `style.css`: interfaccia (stessi stili di Qui-Trekking, colori viola del logo Qui-Bike)
 - `core.js`: logica (difficoltà MTB, fondo, tipo di percorso, unione dei tratti, lunghezza, dislivello, pendenza, tempo,
   orari, query Overpass); si può usare anche da Node (`require("./core.js")`)
 - `app.js`: mappa, GPS, percorsi, elenco, impostazioni
 - `config.js`: impostazioni iniziali e numero di versione
 - `sw.js`, `manifest.webmanifest`, `installa.js`: installazione come app
 - `aggiorna_percorsi.js`, `.github/workflows/pubblica.yml`: scaricamento settimanale della Lombardia e pubblicazione
-- `icon-*.png`, `favicon-64.png`, `apple-touch-icon.png`: logo Qui con la bici
+- `icon-*.png`, `favicon-64.png`, `apple-touch-icon.png`: logo Qui-Bike
