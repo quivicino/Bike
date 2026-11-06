@@ -3,7 +3,7 @@
 Web app per il telefono che mostra i **percorsi in mountain bike e gravel** vicino a te, con lo stesso aspetto e
 funzionamento di [Qui-Trekking](https://github.com/quivicino/Trekking) e delle altre app Qui:
 
-- itinerari MTB e in bici di OpenStreetMap (relazioni `route=mtb` e `route=bicycle`, esclusi gli EuroVelo `network=icn`),
+- itinerari MTB e in bici di OpenStreetMap (relazioni `route=mtb` e `route=bicycle` con qualunque `network`: `lcn`, `rcn`, `ncn` e anche gli EuroVelo `icn`, come VENTO lungo il Po),
   colorati secondo la **difficoltà MTB**, come le piste: verde **Facile** (S0), blu **Media** (S1), rosso **Difficile** (S2),
   nero **Per esperti** (S3 e oltre), grigio a puntini se non indicata. Viene da `mtb:scale` (o `mtb:scale:imba`) del percorso;
   se manca, dal grado più alto che copre almeno 300 m (o il 5%) delle sue vie. Senza tratti di sentiero il percorso è

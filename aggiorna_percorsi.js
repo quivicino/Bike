@@ -30,7 +30,7 @@ const PASSO = 0.1;           // lato delle tessere del sito, in gradi (circa 11 
 const METRI_TRA_PUNTI = 5;   // semplificazione della traccia
 const ORE_VALIDI = 6 * 24;   // i dati pubblicati da meno di 6 giorni non si riscaricano (salvo FORZA)
 // Da aumentare quando cambia il formato dei file: i dati pubblicati con un'altra versione si riscaricano subito
-const VERSIONE_DATI = 1;
+const VERSIONE_DATI = 2;
 const CARTELLA = path.join(__dirname, "dati");
 const USER_AGENT = "Qui-Bike/1.0 (https://github.com/quivicino/Bike)";
 const SERVER = [
