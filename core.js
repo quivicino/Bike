@@ -685,12 +685,12 @@
     const dLat = raggio / 111320, dLon = raggio / (111320 * Math.cos(lat * Math.PI / 180));
     return [lat - dLat, lon - dLon, lat + dLat, lon + dLon].map((x) => +x.toFixed(5));
   }
-  // Percorsi MTB e ciclabili (esclusi gli itinerari europei EuroVelo, lunghissimi), i tag delle loro vie
+  // Percorsi MTB e ciclabili (locali, regionali, nazionali ed EuroVelo come VENTO), i tag delle loro vie
   // (per fondo e difficoltà) e i punti utili, in un riquadro
   function queryOverpass(bbox, timeout) {
     const b = `(${bbox.join(",")})`;
     return `[out:json][timeout:${timeout || 90}][maxsize:400000000];` +
-      `relation${b}[type=route][route~"^(mtb|bicycle)$"][network!=icn]->.p;.p out geom${b};` +
+      `relation${b}[type=route][route~"^(mtb|bicycle)$"]->.p;.p out geom${b};` +
       `way(r.p)${b};out tags;` +
       `(nwr${b}[tourism=alpine_hut];` +
       `node${b}[amenity=drinking_water];` +
