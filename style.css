@@ -1,8 +1,8 @@
 /* Qui-Bike – stesso aspetto di Qui-Trekking e Qui-Pets: mappa a tutto schermo con pulsanti tondi,
-   l'elenco è una pagina a tutto schermo. Barra color terra, percorsi colorati per difficoltà (verde, blu, rosso, nero). */
+   l'elenco è una pagina a tutto schermo. Barra viola del logo Qui-Bike, percorsi colorati per difficoltà (verde, blu, rosso, nero). */
 :root {
-  --blu: #b4471b;
-  --blu-scuro: #8f3714;
+  --blu: #7b199d;
+  --blu-scuro: #5e1378;
   --libero: #15805a;
   --attenzione: #b87900;
   --pieno: #c23a2f;
@@ -18,7 +18,7 @@
   --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --r: 14px;
   --su-colore: #ffffff;
-  --barra: #9a3412;
+  --barra: #64157f;
   /* colori dei tipi di punto */
   --t-W: #1f86d0; --t-A: #e07a10; --t-N: #6b4bb8; --t-C: #15935a; --t-R: #b5442c;
   /* difficoltà MTB dei percorsi, come le piste */
@@ -29,8 +29,8 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --blu: #f39a6b;
-    --blu-scuro: #e07e4c;
+    --blu: #d08bf5;
+    --blu-scuro: #be6eeb;
     --libero: #3fbf8a;
     --attenzione: #e3a82d;
     --pieno: #ec6a5f;
@@ -43,7 +43,7 @@
     --bordo: #2a3650;
     --ombra: 0 6px 24px rgba(0, 0, 0, .45);
     --su-colore: #0c1220;
-    --barra: #5a1f0b;
+    --barra: #3a0b4a;
     color-scheme: dark;
   }
   .mappa:not(.satellite) .leaflet-tile-pane { filter: brightness(.72) contrast(1.1) saturate(.7); }
@@ -598,7 +598,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   z-index: 1550;
   /* scheda sempre bianca con le scritte nere, anche col tema scuro del telefono */
   --superficie: #ffffff; --bg: #f1f3f6; --testo: #000000; --testo-2: #333333; --bordo: #d5dbe5;
-  --blu: #b4471b; --blu-scuro: #8f3714; --su-colore: #ffffff; --osm: #3d4a63; --grigio: #5c6472;
+  --blu: #7b199d; --blu-scuro: #5e1378; --su-colore: #ffffff; --osm: #3d4a63; --grigio: #5c6472;
   --libero: #15805a; --attenzione: #8f5e00; --pieno: #c23a2f;
   background: #ffffff; color: #000000; color-scheme: light;
 }
