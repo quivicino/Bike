@@ -7,7 +7,7 @@
  * Fonte dei dati, in quest'ordine:
  * 1. la copia del computer di paolo: osm_bike.py estrae ogni giorno dal PBF Italia di Geofabrik gli stessi
  *    oggetti della query Overpass e li carica sulla release dati-osm (bike.json.gz). Zona: tutta l'Italia;
- * 2. se la copia manca o è vecchia: Overpass, solo per la Lombardia (più 15 km oltre i confini).
+ * 2. se la copia manca o è vecchia: Overpass, solo per Lombardia e Valle d'Aosta (più 15 km oltre i confini).
  *
  * Lo esegue GitHub (vedi .github/workflows/pubblica.yml) a ogni pubblicazione e ogni lunedì. Overpass si
  * interroga a blocchi di mezzo grado per non chiedere troppo in una volta sola. I dati NON vengono salvati nel repository, finiscono solo
@@ -26,8 +26,10 @@ const fs = require("fs");
 const path = require("path");
 const QT = require("./core.js");
 
-// Lombardia (riquadro che la contiene) e quanto prendere oltre i confini
+// Regioni salvate nel sito (riquadri che le contengono) e quanto prendere oltre i confini
 const LOMBARDIA = [44.68, 8.50, 46.64, 11.43];
+const VALLE_AOSTA = [45.46, 6.80, 45.99, 7.94];
+const ZONE = [LOMBARDIA, VALLE_AOSTA];   // zone scaricate da Overpass (riserva)
 // Con la copia del computer di paolo (PBF Italia di Geofabrik) si salva tutta l'Italia
 const ITALIA = [35.28, 6.62, 47.10, 18.53];
 const COPIA_PC = process.env.COPIA_PC || "https://github.com/quivicino/Bike/releases/download/dati-osm/bike.json.gz";
@@ -150,7 +152,7 @@ function semplifica(l) {
 
 const nomeTessera = (lat, lon) => `t_${Math.floor(lat / PASSO)}_${Math.floor(lon / PASSO)}.json`;
 
-function salva(raccolta, zona, coperta = LOMBARDIA, datiOsm = null) {
+function salva(raccolta, zona, coperte = ZONE, datiOsm = null) {
   const tessere = new Map();
   const prendi = (t) => { if (!tessere.has(t)) tessere.set(t, { s: [], r: {}, p: [] }); return tessere.get(t); };
   let nPercorsi = 0, puntiPrima = 0, puntiDopo = 0;
@@ -182,7 +184,8 @@ function salva(raccolta, zona, coperta = LOMBARDIA, datiOsm = null) {
   const indice = {
     versioneDati: VERSIONE_DATI,
     passo: PASSO,
-    zona: coperta,          // dentro questo riquadro l'app usa i dati del sito
+    zona: coperte.length === 1 ? coperte[0] : LOMBARDIA,   // per le versioni dell'app che conoscono un solo riquadro
+    zone: coperte,          // dentro questi riquadri l'app usa i dati del sito
     datiOsm,                // data dei dati della copia del computer (null = da Overpass)
     scaricata: zona,
     aggiornato: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
@@ -204,8 +207,8 @@ const scriviIndice = (indice) => fs.writeFileSync(path.join(CARTELLA, "indice.js
 // (MINUTI_MAX) si saltano i rimanenti. Restituisce i blocchi mancanti.
 async function scaricaTutto() {
   const scadenza = Date.now() + (+process.env.MINUTI_MAX || 270) * 60000;
-  const zona = allarga(LOMBARDIA);
-  let lista = blocchi(zona);
+  const zona = ZONE.map(allarga);
+  let lista = zona.flatMap(blocchi);
   // per provare: BLOCCHI=21,22 scarica solo quei blocchi
   if (process.env.BLOCCHI) lista = process.env.BLOCCHI.split(",").map((i) => lista[+i]).filter(Boolean);
   const raccolta = { rel: new Map(), punti: new Map(), vie: new Map() };
@@ -348,7 +351,7 @@ async function usaCopiaPc(sito, pubblicato) {
   const raccolta = { rel: new Map(), punti: new Map(), vie: new Map() };
   unisciBlocchi(raccolta, copia.elementi);
   copia.elementi = null;   // libera memoria
-  salva(raccolta, [ITALIA], ITALIA, copia.base);
+  salva(raccolta, [ITALIA], [ITALIA], copia.base);
   scriviEsito("nuovi");
   return "fatto";
 }
@@ -360,7 +363,7 @@ async function main() {
   try { pubblicato = (await indicePubblicato(sito)).indice; } catch (e) { /* nessun dato pubblicato */ }
   if (await usaCopiaPc(sito, pubblicato) === "fatto") return;
   // Copia non disponibile ma sul sito ci sono già i dati di tutta l'Italia presi dal computer:
-  // si tengono quelli (riscaricare da Overpass la sola Lombardia ridurrebbe la zona coperta).
+  // si tengono quelli (riscaricare da Overpass solo due regioni ridurrebbe la zona coperta).
   if (pubblicato && pubblicato.datiOsm && pubblicato.versioneDati === VERSIONE_DATI && !forza) {
     try {
       console.log(`Tengo i dati pubblicati (copia del computer del ${pubblicato.datiOsm}).`);
@@ -378,7 +381,9 @@ async function main() {
       if (indice.versioneDati !== VERSIONE_DATI) {
         console.log("I dati pubblicati sono di una versione precedente: li riscarico da Overpass.");
       } else if (indice.datiOsm) {
-        console.log("I dati pubblicati vengono dalla copia del computer: riscarico la Lombardia da Overpass.");
+        console.log("I dati pubblicati vengono dalla copia del computer: riscarico le regioni da Overpass.");
+      } else if (JSON.stringify(indice.zone) !== JSON.stringify(ZONE)) {
+        console.log("Le regioni salvate sono cambiate: riscarico i dati da Overpass.");
       } else if (ore < ORE_VALIDI) {
         console.log(`Dati pubblicati ${ore.toFixed(1)} ore fa: non serve riscaricarli.`);
         await recuperaDalSito(sito);
@@ -414,4 +419,4 @@ async function main() {
 }
 
 if (require.main === module) main();
-else module.exports = { ITALIA, daCopiaPc, LOMBARDIA, allarga, blocchi, unisciBlocchi, semplifica, salva, riempiBuchi };
+else module.exports = { ITALIA, daCopiaPc, LOMBARDIA, VALLE_AOSTA, ZONE, allarga, blocchi, unisciBlocchi, semplifica, salva, riempiBuchi };

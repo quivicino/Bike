@@ -242,8 +242,8 @@
   }
 
   // ---------- Dati salvati nel sito ----------
-  // GitHub prepara percorsi e punti di tutta l'Italia (copia del computer, osm_bike.py) o almeno della Lombardia
-  // (Overpass) e li salva nella cartella "dati" del sito, divisi in tessere. Dentro indice.zona l'app li legge da lì.
+  // GitHub prepara percorsi e punti di tutta l'Italia (copia del computer, osm_bike.py) o almeno di Lombardia e Valle d'Aosta
+  // (Overpass) e li salva nella cartella "dati" del sito, divisi in tessere. Dentro indice.zone l'app li legge da lì.
   // Ogni sentiero è salvato una volta sola, nella sua tessera "di casa": le altre tessere che attraversa
   // dicono solo dov'è, e quella tessera si scarica in un secondo momento.
   let indiceSito = null, indiceLetto = 0;
@@ -266,9 +266,10 @@
   }
   async function dalSito(lat, lon, raggio, forza) {
     const ind = await leggiIndice(forza);
-    if (!ind || !ind.zona || !ind.tessere) return null;
-    const [zs, zw, zn, ze] = ind.zona;
-    if (!(lat >= zs && lat <= zn && lon >= zw && lon <= ze)) return null;
+    if (!ind || !(ind.zone || ind.zona) || !ind.tessere) return null;
+    // più regioni (Lombardia, Valle d'Aosta…); i dati più vecchi hanno un solo riquadro in "zona"
+    const zone = ind.zone || [ind.zona];
+    if (!zone.some(([zs, zw, zn, ze]) => lat >= zs && lat <= zn && lon >= zw && lon <= ze)) return null;
     const passo = ind.passo || 0.1;
     const esistenti = new Set(ind.tessere);
     const [s, w, n, e] = QT.riquadro(lat, lon, raggio);
@@ -298,7 +299,7 @@
     if (!forza && ultimo && Date.now() - (ultimo.letto || ultimo.quando) < 60 * 60000 && copre(ultimo, lat, lon, raggio)) {
       return { ...ultimo, fonte: ultimo.fonte === "sito" ? "sito" : "memoria" };
     }
-    // 1. Dentro la zona salvata (Italia o Lombardia): i dati del sito
+    // 1. Dentro la zona salvata (Italia, o Lombardia e Valle d'Aosta): i dati del sito
     try {
       const sito = await dalSito(lat, lon, raggio, forza);
       if (sito) {

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    # ogni lunedì alle 3:37 (ora UTC): rifà i dati (tutta l'Italia dalla copia del computer, se no la Lombardia da Overpass)
+    # ogni lunedì alle 3:37 (ora UTC): rifà i dati (tutta l'Italia dalla copia del computer, se no Lombardia e Valle d'Aosta da Overpass)
     - cron: "37 3 * * 1"
   workflow_dispatch:         # pulsante "Run workflow": riscarica subito i dati da OpenStreetMap
 
@@ -33,7 +33,7 @@ jobs:
 
       # I dati non stanno nel repository: il lunedì (o col pulsante) si riscaricano da OpenStreetMap,
       # negli altri casi si ricopiano quelli già pubblicati. Se Overpass non risponde restano quelli vecchi.
-      - name: Percorsi da OpenStreetMap (Italia dalla copia del computer, se no Lombardia da Overpass)
+      - name: Percorsi da OpenStreetMap (Italia dalla copia del computer, se no Lombardia e Valle d'Aosta da Overpass)
         id: dati
         timeout-minutes: 300   # lo script si ferma da solo dopo 270 minuti e salva quello che ha
         continue-on-error: true   # senza dati, l'app chiede i percorsi direttamente dal telefono

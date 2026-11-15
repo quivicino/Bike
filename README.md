@@ -26,9 +26,9 @@ funzionamento di [Qui-Trekking](https://github.com/quivicino/Trekking) e delle a
   come `bike.json.gz` sulla release `dati-osm` e fa ripartire la pubblicazione: `aggiorna_percorsi.js` li divide nelle tessere
   e la zona coperta diventa tutta l'Italia. Serve `pip install osmium` e `gh` collegato all'account; uso:
   `python3 osm_bike.py percorso/italy-latest.osm.pbf` (senza percorso scarica il PBF).
-- **Riserva: la Lombardia da Overpass.** Se la copia manca o ha più di 3 giorni (e sul sito non ci sono già i dati d'Italia),
-  GitHub esegue `aggiorna_percorsi.js` (workflow `.github/workflows/pubblica.yml`): scarica da Overpass percorsi, tag delle loro vie e punti della Lombardia
-  allargata di 15 km, a blocchi di mezzo grado, unisce i pezzi dei percorsi tagliati tra un blocco e l'altro e li salva nella
+- **Riserva: Lombardia e Valle d'Aosta da Overpass.** Se la copia manca o ha più di 3 giorni (e sul sito non ci sono già i dati d'Italia),
+  GitHub esegue `aggiorna_percorsi.js` (workflow `.github/workflows/pubblica.yml`): scarica da Overpass percorsi, tag delle loro vie e punti della Lombardia e della Valle d'Aosta
+  allargate di 15 km, a blocchi di mezzo grado, unisce i pezzi dei percorsi tagliati tra un blocco e l'altro e li salva nella
   cartella `dati/` del sito, divisi in tessere da 0,1°. Ogni percorso è salvato una volta sola (nella tessera dove inizia).
   Dentro la zona salvata l'app legge da lì; fuori interroga i server pubblici di Overpass (2–25 km intorno a te).
 - I dati **non** stanno nel repository, solo nel sito pubblicato. Per riscaricarli subito: Actions →
@@ -56,5 +56,5 @@ pubblica il sito su `https://quivicino.github.io/Bike/`.
 - `config.js`: impostazioni iniziali e numero di versione
 - `sw.js`, `manifest.webmanifest`, `installa.js`: installazione come app
 - `osm_bike.py`: copia di tutta l'Italia dal PBF di Geofabrik, da far girare ogni giorno sul computer
-- `aggiorna_percorsi.js`, `.github/workflows/pubblica.yml`: tessere dalla copia del computer (o dalla Lombardia via Overpass) e pubblicazione
+- `aggiorna_percorsi.js`, `.github/workflows/pubblica.yml`: tessere dalla copia del computer (o da Lombardia e Valle d'Aosta via Overpass) e pubblicazione
 - `icon-*.png`, `favicon-64.png`, `apple-touch-icon.png`: logo Qui-Bike
