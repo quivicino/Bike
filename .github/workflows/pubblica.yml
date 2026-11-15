@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    # ogni lunedì alle 3:37 (ora UTC): riscarica percorsi MTB e bici, fontanelle e officine di tutta la Lombardia
+    # ogni lunedì alle 3:37 (ora UTC): rifà i dati (tutta l'Italia dalla copia del computer, se no Lombardia e Valle d'Aosta da Overpass)
     - cron: "37 3 * * 1"
   workflow_dispatch:         # pulsante "Run workflow": riscarica subito i dati da OpenStreetMap
 
@@ -33,13 +33,15 @@ jobs:
 
       # I dati non stanno nel repository: il lunedì (o col pulsante) si riscaricano da OpenStreetMap,
       # negli altri casi si ricopiano quelli già pubblicati. Se Overpass non risponde restano quelli vecchi.
-      - name: Scarica i percorsi della Lombardia da OpenStreetMap
+      - name: Percorsi da OpenStreetMap (Italia dalla copia del computer, se no Lombardia e Valle d'Aosta da Overpass)
         id: dati
         timeout-minutes: 300   # lo script si ferma da solo dopo 270 minuti e salva quello che ha
         continue-on-error: true   # senza dati, l'app chiede i percorsi direttamente dal telefono
         env:
           SITO: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
           FORZA: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          # la copia del computer con tutta l'Italia occupa qualche GB in memoria
+          NODE_OPTIONS: --max-old-space-size=6144
         run: node aggiorna_percorsi.js
 
       - uses: actions/configure-pages@v6
@@ -75,7 +77,7 @@ jobs:
           if os.environ["STATO_JOB"] != "success" or os.environ["STATO_DATI"] != "success" or not stato:
               msg = ("Aggiornamento fallito", "Tocca per vedere cosa è successo su GitHub.", "x", 4)
           elif stato == "nuovi":
-              msg = ("Percorsi aggiornati", f"Riscaricati da OpenStreetMap: {n} percorsi in Lombardia.", "white_check_mark", 3)
+              msg = ("Percorsi aggiornati", f"Rifatti da OpenStreetMap: {n} percorsi.", "white_check_mark", 3)
           elif stato == "parziale":
               msg = ("Percorsi aggiornati in parte", f"{n} percorsi: alcune zone non hanno risposto e restano quelle vecchie.", "warning", 3)
           elif stato == "ripiego":

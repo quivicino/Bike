@@ -242,8 +242,8 @@
   }
 
   // ---------- Dati salvati nel sito ----------
-  // Ogni lunedì GitHub scarica sentieri e punti di tutta la Lombardia (più 15 km oltre i confini) e li salva nella
-  // cartella "dati" del sito, divisi in tessere. In Lombardia l'app li legge da lì, senza dipendere da Overpass.
+  // GitHub prepara percorsi e punti di tutta l'Italia (copia del computer, osm_bike.py) o almeno di Lombardia e Valle d'Aosta
+  // (Overpass) e li salva nella cartella "dati" del sito, divisi in tessere. Dentro indice.zone l'app li legge da lì.
   // Ogni sentiero è salvato una volta sola, nella sua tessera "di casa": le altre tessere che attraversa
   // dicono solo dov'è, e quella tessera si scarica in un secondo momento.
   let indiceSito = null, indiceLetto = 0;
@@ -299,7 +299,7 @@
     if (!forza && ultimo && Date.now() - (ultimo.letto || ultimo.quando) < 60 * 60000 && copre(ultimo, lat, lon, raggio)) {
       return { ...ultimo, fonte: ultimo.fonte === "sito" ? "sito" : "memoria" };
     }
-    // 1. In Lombardia: i dati salvati nel sito
+    // 1. Dentro la zona salvata (Italia, o Lombardia e Valle d'Aosta): i dati del sito
     try {
       const sito = await dalSito(lat, lon, raggio, forza);
       if (sito) {
@@ -308,7 +308,7 @@
         return ultimo;
       }
     } catch (e) { console.warn("Dati del sito non disponibili", e); }
-    // 2. Fuori dalla Lombardia (o sito senza dati): i server pubblici di OpenStreetMap
+    // 2. Fuori dalla zona salvata (o sito senza dati): i server pubblici di OpenStreetMap
     try {
       ultimo = await daOverpass(lat, lon, raggio);
       Memoria.salva("dati", "ultimo", ultimo).catch(() => {});
