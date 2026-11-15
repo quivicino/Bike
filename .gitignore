@@ -1,1 +1,6 @@
 dati/
+
+# copia del computer (osm_bike.py)
+*.osm.pbf
+*.osm.pbf.part
+bike*.json.gz
