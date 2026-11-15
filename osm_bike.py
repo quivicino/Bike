@@ -8,10 +8,16 @@ Legge il PBF Italia di Geofabrik ed estrae gli stessi oggetti che l'app chiede a
   - fontanelle, colonnine attrezzi, negozi e officine bici, ricariche e-bike e rifugi.
 Scrive bike.json.gz nello stesso formato di una risposta di Overpass, lo carica sulla release «dati-osm»
 del repository quivicino/Bike e fa ripartire la pubblicazione del sito, che lo trasforma nelle tessere dell'app
-(aggiorna_percorsi.js). Se la copia manca o ha più di 3 giorni, il sito torna alla sola Lombardia da Overpass.
+(aggiorna_percorsi.js). Se la copia manca o ha più di 3 giorni, il sito torna alle regioni scaricate da Overpass.
 
-Serve:   pip install osmium        e il programma «gh» (GitHub CLI) collegato all'account quivicino.
-Uso:     python3 osm_bike.py [percorso/italy-latest.osm.pbf]
+Per occupare poco disco e poca memoria, prima ritaglia dal PBF Italia un piccolo PBF (bike-filtrato.osm.pbf, qualche
+decina di MB) con solo i percorsi, i punti e le vie e i nodi che servono, e lavora su quello.
+
+Serve:   pip install osmium  (versione 4 o successiva)
+Invio:   con il token GitHub in token.txt (nella cartella dello script, come osm_italia.py, o indicato con
+         --token=percorso); il token deve poter scrivere su quivicino/Bike (Contents e Actions). Senza token usa
+         il programma «gh» (GitHub CLI) collegato all'account quivicino.
+Uso:     py -3.12 osm_bike.py [percorso/italy-latest.osm.pbf]
          senza percorso scarica il PBF da Geofabrik (circa 2 GB) nella cartella di questo script, se non c'è
          già una copia di meno di 20 ore. Con --senza-invio crea solo il file, senza caricarlo.
 """
@@ -20,7 +26,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -29,10 +34,15 @@ import osmium
 
 REPO = "quivicino/Bike"
 RELEASE = "dati-osm"
+API = "https://api.github.com/repos/" + REPO
 NOME = "bike"                      # bike.json.gz (e bike-2.json.gz, … se serve dividerlo)
 PBF_URL = "https://download.geofabrik.de/europe/italy-latest.osm.pbf"
 CARTELLA = os.path.dirname(os.path.abspath(__file__))
 TAG_VIE = ("highway", "surface", "tracktype", "mtb:scale")
+FILTRO = [("route", "mtb"), ("route", "bicycle"), ("amenity", "drinking_water"), ("amenity", "water_point"),
+          ("amenity", "fountain"), ("amenity", "bicycle_repair_station"), ("shop", "bicycle"),
+          ("craft", "bicycle_repair"), ("amenity", "bicycle_rental"), ("amenity", "charging_station"),
+          ("tourism", "alpine_hut")]
 MAX_PARTE = 150 * 1024 * 1024      # oltre questa misura (JSON non compresso) si apre una nuova parte:
                                    # Node non legge testi più lunghi di circa 500 MB
 
@@ -165,11 +175,67 @@ def scrivi(elementi, base, cartella):
     return file
 
 
+def ritaglia(pbf, filtrato):
+    """Piccolo PBF con gli oggetti di FILTRO e tutte le vie e i nodi a cui rimandano (con i loro tag)."""
+    w = osmium.BackReferenceWriter(filtrato, ref_src=pbf, overwrite=True, remove_tags=False)
+    try:
+        for o in osmium.FileProcessor(pbf).with_filter(osmium.filter.TagFilter(*FILTRO)):
+            w.add(o)
+    finally:
+        w.close()
+    print(f"PBF ritagliato: {os.path.getsize(filtrato) / 1048576:.1f} MB", flush=True)
+
+
+def leggi_token(argomento):
+    percorso = argomento or os.path.join(CARTELLA, "token.txt")
+    if not os.path.exists(percorso):
+        return None
+    for riga in open(percorso, encoding="utf-8-sig"):
+        riga = riga.strip()
+        if riga and not riga.startswith("#"):
+            return riga.split("=", 1)[-1].strip().strip('"')
+    return None
+
+
+def github(token, metodo, url, dati=None, tipo="application/json"):
+    corpo = dati if isinstance(dati, (bytes, type(None))) else json.dumps(dati).encode()
+    req = urllib.request.Request(url if url.startswith("http") else API + url, data=corpo, method=metodo, headers={
+        "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Qui-Bike osm_bike.py", "Content-Type": tipo})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        testo = r.read()
+    return json.loads(testo) if testo else None
+
+
+def invia_con_token(token, file):
+    import urllib.error
+    try:
+        rel = github(token, "GET", f"/releases/tags/{RELEASE}")
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        print(f"Creo la release {RELEASE} su {REPO} …", flush=True)
+        rel = github(token, "POST", "/releases", {
+            "tag_name": RELEASE, "target_commitish": "main", "name": "Dati OpenStreetMap (copia del computer)",
+            "body": "File creati ogni giorno da osm_bike.py dal PBF Italia di Geofabrik. © OpenStreetMap contributors (ODbL)."})
+    nomi = {os.path.basename(f) for f in file}
+    for a in rel.get("assets", []):
+        if a["name"] in nomi or (a["name"].startswith(NOME + "-") and a["name"].endswith(".json.gz")):
+            github(token, "DELETE", f"/releases/assets/{a['id']}")
+    print("Carico i file sulla release …", flush=True)
+    base = rel["upload_url"].split("{")[0]
+    for f in file:
+        with open(f, "rb") as h:
+            github(token, "POST", f"{base}?name={os.path.basename(f)}", h.read(), "application/gzip")
+    print("Faccio ripartire la pubblicazione del sito …", flush=True)
+    github(token, "POST", "/actions/workflows/pubblica.yml/dispatches", {"ref": "main"})
+
+
 def gh(*argomenti, controlla=True):
     return subprocess.run(["gh", *argomenti], check=controlla, capture_output=True, text=True)
 
 
-def invia(file):
+def invia_con_gh(file):
     if gh("release", "view", RELEASE, "-R", REPO, controlla=False).returncode != 0:
         print(f"Creo la release {RELEASE} su {REPO} …", flush=True)
         gh("release", "create", RELEASE, "-R", REPO, "--title", "Dati OpenStreetMap (copia del computer)",
@@ -187,14 +253,15 @@ def main():
     inizio = time.time()
     print(f"PBF {pbf} (dati OSM del {base})", flush=True)
 
+    filtrato = os.path.join(CARTELLA, NOME + "-filtrato.osm.pbf")
+    ritaglia(pbf, filtrato)
+
     p = Percorsi()
-    p.apply_file(pbf, locations=False)
+    p.apply_file(filtrato, locations=False)
     print(f"Percorsi in bici: {len(p.rel)}, vie: {len(p.vie)}", flush=True)
 
-    # Le coordinate di tutti i nodi d'Italia stanno in un file temporaneo (qualche GB), non in memoria
-    with tempfile.TemporaryDirectory(dir=CARTELLA) as tmp:
-        v = VieEPunti(p.vie)
-        v.apply_file(pbf, locations=True, idx="sparse_file_array," + os.path.join(tmp, "nodi.idx"))
+    v = VieEPunti(p.vie)
+    v.apply_file(filtrato, locations=True, idx="flex_mem")
     print(f"Vie trovate: {len(v.geometria)}, punti: {len(v.punti)}", flush=True)
 
     elementi = []
@@ -213,7 +280,12 @@ def main():
     file = scrivi(elementi, base, CARTELLA)
     print(f"Fatto in {(time.time() - inizio) / 60:.1f} minuti", flush=True)
     if "--senza-invio" not in sys.argv:
-        invia(file)
+        tok = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--token=")]
+        token = leggi_token(tok[0] if tok else None)
+        if token:
+            invia_con_token(token, file)
+        else:
+            invia_con_gh(file)
         print("Inviato: tra qualche minuto il sito ha i percorsi di tutta l'Italia.", flush=True)
 
 
