@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /*
  * Qui-Bike – prepara i percorsi MTB e in bici di OpenStreetMap (con fondo e difficoltà delle loro vie),
- * fontanelle, colonnine attrezzi, negozi bici, ricariche e-bike e rifugi e li salva nel sito, divisi in "tessere"
+ * colonnine attrezzi, negozi bici, ricariche e-bike, rifugi, funivie e seggiovie, e le fontanelle e i bar e ristoranti
+ * a meno di 300 m da un percorso, e li salva nel sito, divisi in "tessere"
  * da 0,1 gradi. Dentro la zona salvata l'app legge da qui e non dipende dai server pubblici di OpenStreetMap.
  *
  * Fonte dei dati, in quest'ordine:
@@ -40,7 +41,7 @@ const PASSO = 0.1;           // lato delle tessere del sito, in gradi (circa 11 
 const METRI_TRA_PUNTI = 5;   // semplificazione della traccia
 const ORE_VALIDI = 6 * 24;   // i dati pubblicati da meno di 6 giorni non si riscaricano (salvo FORZA)
 // Da aumentare quando cambia il formato dei file: i dati pubblicati con un'altra versione si riscaricano subito
-const VERSIONE_DATI = 2;
+const VERSIONE_DATI = 3;
 const CARTELLA = path.join(__dirname, "dati");
 const USER_AGENT = "Qui-Bike/1.0 (https://github.com/quivicino/Bike)";
 const SERVER = [
@@ -124,9 +125,12 @@ function unisciBlocchi(raccolta, elementi) {
         if (!v.geometry) v.geometry = m.geometry.slice();
         else m.geometry.forEach((g, j) => { if (g && !v.geometry[j]) v.geometry[j] = g; });
       });
-    } else if (el.type !== "way" || el.center) {
+    } else if (el.type !== "way" || el.center || el.geometry) {
       const p = QT.compatta(el);
-      if (p) raccolta.punti.set(p.i, p);
+      if (!p) continue;
+      // impianto a fune tagliato tra due blocchi: si tiene il pezzo più lungo
+      const prima = raccolta.punti.get(p.i);
+      if (!(prima && prima.tr && p.tr && prima.tr.length > p.tr.length)) raccolta.punti.set(p.i, p);
     }
   }
   // tag delle vie dei percorsi: servono per il fondo e la difficoltà
@@ -156,12 +160,22 @@ function salva(raccolta, zona, coperte = ZONE, datiOsm = null) {
   const tessere = new Map();
   const prendi = (t) => { if (!tessere.has(t)) tessere.set(t, { s: [], r: {}, p: [] }); return tessere.get(t); };
   let nPercorsi = 0, puntiPrima = 0, puntiDopo = 0;
+  const percorsi = [];
   for (const [id, r] of raccolta.rel) {
     const s = QT.compattaSentiero({ type: "relation", id, tags: r.tags, members: r.membri }, raccolta.vie);
     if (!s) continue;
     for (const l of s.g) puntiPrima += l.length;
     s.g = s.g.map(semplifica);
     for (const l of s.g) puntiDopo += l.length;
+    percorsi.push(s);
+  }
+  // Bar, ristoranti, agriturismi e fontanelle: solo quelli vicino a un percorso (osm_bike.py e la query di
+  // Overpass li filtrano già; qui si ricontrolla sulla traccia semplificata, con 10 m di margine)
+  const vicinoA = [...raccolta.punti.values()].filter((p) => QT.SOLO_VICINO.has(p.k));
+  const vicini = QT.vicinoAiSentieri(vicinoA, (function* () { for (const s of percorsi) yield* s.g; })(), QT.RAGGIO_RISTORO + 10);
+  for (const p of vicinoA) if (!vicini.has(p.i)) raccolta.punti.delete(p.i);
+  console.log(`Bar, ristoranti e fontanelle vicino ai percorsi: ${vicini.size} (scartati ${vicinoA.length - vicini.size})`);
+  for (const s of percorsi) {
     const casa = nomeTessera(s.g[0][0][0], s.g[0][0][1]);
     prendi(casa).s.push(s);
     const attraversate = new Set();

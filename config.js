@@ -3,7 +3,7 @@
  */
 window.QT_CONFIG = {
   // Versione dell'app, mostrata in fondo alla pagina Elenco. Aumentala a ogni aggiornamento.
-  versione: "5",
+  versione: "6",
 
   // Raggio di ricerca iniziale in metri (modificabile anche dall'app)
   raggioMetri: 15000,
@@ -13,7 +13,7 @@ window.QT_CONFIG = {
 
   // Cosa mostrare all'inizio: tipi di percorso (TM mountain bike, TG gravel, TS strada), difficoltà (DF facile,
   // DM media, DD difficile, DX per esperti, DND non indicata) e punti (W fontanelle, A colonnine attrezzi,
-  // N negozi e officine, C ricariche e-bike, R rifugi)
+  // N negozi e officine, C ricariche e-bike, R rifugi, L bar e ristoranti vicino ai percorsi, F funivie e seggiovie)
   categorie: ["TM", "TG", "TS", "DF", "DM", "DD", "DX", "DND", "W", "A", "N"],
 
   // Massimo di segnaposto sulla mappa (i più vicini): oltre, la mappa diventa lenta sul telefono

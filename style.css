@@ -21,7 +21,7 @@
   --su-colore: #ffffff;
   --barra: linear-gradient(90deg, #0b0c0d 0%, #8c33ff 100%);
   /* colori dei tipi di punto */
-  --t-W: #1f86d0; --t-A: #e07a10; --t-N: #6b4bb8; --t-C: #15935a; --t-R: #b5442c;
+  --t-W: #1f86d0; --t-A: #e07a10; --t-N: #6b4bb8; --t-C: #15935a; --t-R: #b5442c; --t-L: #c2185b; --t-F: #34424f;
   /* difficoltà MTB dei percorsi, come le piste */
   --d-F: #2fa84f; --d-M: #1f63d6; --d-D: #e2311d; --d-X: #1b1b1b; --d-ND: #8a8f99;
   /* tipi di percorso */
@@ -146,12 +146,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .gr-freccia { width: 80px; height: 80px; }
 .gr-freccia { transition: transform .4s ease-out; }
 .gr-testi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.gr-testi b { font: 700 48px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.gr-testi b { font: 700 26px/1 var(--font-display); font-variant-numeric: tabular-nums; }
 .gr-esci {
-  flex: none; align-self: center; margin-left: 4px; min-height: 64px; padding: 0 22px; border-radius: 999px;
-  border: 3px solid var(--pieno); background: var(--superficie); color: var(--pieno); font: 700 32px/1 var(--font-display);
+  flex: none; align-self: center; margin-left: 4px; min-height: 34px; padding: 0 13px; border-radius: 999px;
+  border: 2px solid var(--pieno); background: var(--superficie); color: var(--pieno); font: 700 16px/1 var(--font-display);
 }
-.gr-testi span { font-size: 28px; line-height: 1.2; color: var(--testo); }
+.gr-testi span { font-size: 26px; line-height: 1.2; color: var(--testo); }
 
 .fab-col {
   position: absolute; right: 16px; top: 16px; z-index: 900;
@@ -302,6 +302,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .voce-testo { min-width: 0; }
 .voce-titolo { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .voce-meta { font-size: 13px; color: var(--testo-2); display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.voce-meta .voce-km { font-weight: 700; color: var(--testo); }
 .tag { font-size: 12px; font-weight: 600; }
 .tag.gratis { color: var(--libero); }
 .tag.reale { color: var(--libero); }
@@ -348,18 +349,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
   border: 2px solid var(--libero); animation: pulsa 2s ease-out infinite;
 }
 @keyframes pulsa { from { transform: scale(1); opacity: .9; } to { transform: scale(2.2); opacity: 0; } }
-/* Cono dell'orientamento: parte dal centro del pallino, lungo il doppio di quello di Google Maps */
-.io-box { position: relative; width: 18px; height: 18px; }
+/* Cono dell'orientamento: parte dal centro del pallino, lungo il doppio di quello di Google Maps.
+   Il pallino è il doppio di quello delle altre app Qui (36 px invece di 18). */
+.io-box { position: relative; width: 36px; height: 36px; }
 .io-cono {
-  position: absolute; left: -26px; bottom: 9px; width: 70px; height: 84px;
+  position: absolute; left: -17px; bottom: 18px; width: 70px; height: 84px;
   transform-origin: 50% 100%; pointer-events: none;
   background: radial-gradient(circle at 50% 100%, rgba(47,124,246,.8) 0, rgba(47,124,246,.45) 50%, rgba(47,124,246,.05) 100%);
   clip-path: polygon(50% 100%, 0 0, 100% 0);
 }
 .io-box .io { position: relative; }
 .io {
-  width: 18px; height: 18px; border-radius: 50%;
-  background: #2f7cf6; border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(47,124,246,.25);
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #2f7cf6; border: 5px solid #fff; box-shadow: 0 0 0 10px rgba(47,124,246,.25);
 }
 
 .leaflet-popup-content { font: 20px/1.35 var(--font-body); margin: 16px 18px; }
@@ -465,6 +467,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mk.tipo-N { --mk-sfondo: var(--t-N); }
 .mk.tipo-C { --mk-sfondo: var(--t-C); }
 .mk.tipo-W { --mk-sfondo: var(--t-W); border-radius: 50%; width: 26px; height: 26px; }
+.mk.tipo-L { --mk-sfondo: var(--t-L); border-radius: 50%; width: 26px; height: 26px; }
+.mk.tipo-F { --mk-sfondo: var(--t-F); }
 .mk svg { display: block; }
 .mk.aperto::after, .mk.chiuso::after {
   content: ""; position: absolute; top: -5px; right: -5px;
@@ -523,7 +527,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .icona-tipo { display: grid; place-items: center; }
 .icona-tipo .mk { width: 36px; height: 36px; font-size: 17px; }
-.icona-tipo .mk.tipo-W { width: 32px; height: 32px; }
+.icona-tipo .mk.tipo-W, .icona-tipo .mk.tipo-L { width: 32px; height: 32px; }
 .voce { grid-template-columns: 48px 1fr auto; }
 .voce .icona-tipo .segnavia { width: 44px; height: auto; border-radius: 3px; }
 .voce-meta .diff { height: 18px; min-width: 26px; font-size: 12.5px; padding: 0 5px; }
@@ -626,6 +630,25 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pop-streetview > b { font: 700 13px var(--font-body); color: var(--testo-2); text-transform: uppercase; letter-spacing: .04em; }
 .pop-streetview .pop-pulsanti { margin-top: 8px; flex-wrap: wrap; }
 .pop .pop-sv { display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 140px; margin-top: 0; font-size: 17px; background: #f4b400; color: #1c1c1c; }
+/* Bar e ristoranti lungo il percorso */
+.pop-ristoro:empty { display: none; }
+.pop-ristoro { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: var(--bg); }
+.rist-titolo b { display: block; font: 700 13px var(--font-body); color: var(--testo-2); text-transform: uppercase; letter-spacing: .04em; }
+.rist-titolo span { font-size: 15px; color: var(--testo-2); }
+.rist-voce {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px; padding: 6px 0; border: 0;
+  border-top: 1px solid var(--bordo); background: none; color: var(--testo); text-align: left; font: inherit; cursor: pointer;
+}
+.rist-voce .mk { flex: none; }
+.rist-testo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rist-testo b { font: 700 18px/1.2 var(--font-display); }
+.rist-testo span { font-size: 15px; color: var(--testo-2); }
+.rist-voce .tag { flex: none; font-size: 14px; font-weight: 700; }
+.rist-vuoto { margin: 0; font-size: 15px; color: var(--testo-2); }
+/* Impianti a fune: si sale con la bici? */
+.pop-bici { font-weight: 600; }
+.pop-bici.si { color: #15935a; }
+.pop-bici.no { color: #c0392b; }
 .pop-scarica { margin-top: 14px; padding: 10px 12px 12px; border-radius: 12px; background: var(--bg); }
 .pop-scarica > b { font: 700 13px var(--font-body); color: var(--testo-2); text-transform: uppercase; letter-spacing: .04em; }
 .pop-scarica .pop-scarica-spiega { margin: 4px 0 6px; font-size: 15px; color: var(--testo-2); }

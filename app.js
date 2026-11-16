@@ -127,7 +127,9 @@
   const CHIAVE = svg('<path d="M14.7 3.3a5 5 0 0 0-5.9 6.6L3.4 15.3a2 2 0 0 0 2.8 2.8l5.4-5.4a5 5 0 0 0 6.6-5.9l-3 3-2.4-.6-.6-2.4Z" fill="currentColor"/>', 16);
   const BICI = svg('<circle cx="5.5" cy="15.5" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18.5" cy="15.5" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5.5 15.5 9 8h7l2.5 7.5M9 8l3.5 7.5h-7M16 8l-3.5 7.5M8 5.5h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>', 18);
   const FULMINE = svg('<path d="M13.5 2 5 13.5h6L9.5 22 19 9.5h-6.2Z" fill="currentColor"/>', 16);
-  const SIMBOLO = { W: GOCCIA, A: CHIAVE, N: BICI, C: FULMINE, R: RIFUGIO };
+  const POSATE = svg('<path d="M7 2.5v6.2M4.6 2.5v5.3a2.4 2.4 0 0 0 4.8 0V2.5M7 10.2V21.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M17.2 2.5c-2.2.9-3.4 3.6-3.4 6.8 0 1.9.9 3 2.4 3.3v8.9h2V2.5Z" fill="currentColor"/>', 16);
+  const CABINA = svg('<path d="M2.5 4.5 21.5 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 3.3V8" stroke="currentColor" stroke-width="1.8"/><rect x="5" y="8" width="14" height="13" rx="3" fill="currentColor"/><rect x="7.2" y="10.3" width="4.2" height="4.2" rx=".8" fill="rgba(0,0,0,.35)"/><rect x="12.6" y="10.3" width="4.2" height="4.2" rx=".8" fill="rgba(0,0,0,.35)"/>', 16);
+  const SIMBOLO = { W: GOCCIA, A: CHIAVE, N: BICI, C: FULMINE, R: RIFUGIO, L: POSATE, F: CABINA };
   const icona = (cls, html) => L.divIcon({ className: "", html: `<div class="mk ${cls}">${html ?? ""}</div>`, iconSize: null });
   const classiApertura = (d) => !d.apertura ? "" : d.apertura.aperto ? " aperto" : " chiuso";
   const classiMarker = (d) => `tipo-${d.k}${classiApertura(d)}`;
@@ -474,14 +476,27 @@
     }
     if (d.k === "R") righe.push('<p class="fonte">Per mangiare o dormire telefona prima: gli orari cambiano con la stagione.</p>');
     if (d.k === "A") righe.push('<p class="fonte">Colonnina pubblica con attrezzi appesi e spesso una pompa: gratuita e sempre disponibile.</p>');
+    if (d.k === "F") {
+      const num = [[QT.formattaKm(d.l || 0), "lunghezza"]];
+      if (d.d) num.push([QT.durataCorsa(d.d), "durata della corsa"]);
+      if (d.c) num.push([esc(d.c), d.y === "s" || d.y === "m" ? "posti per seggiola" : "posti per cabina"]);
+      if (d.v) num.push([esc(d.v), "persone all'ora"]);
+      righe.push(`<div class="pop-num">${num.map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join("")}</div>`);
+      righe.push(d.b === "y" ? '<p class="pop-bici si">Si può salire con la bici</p>'
+        : d.b === "n" ? '<p class="pop-bici no">Bici non ammesse</p>'
+        : '<p class="pop-bici">Non è indicato se si può salire con la bici: chiedi al gestore.</p>');
+      voce.push(d.b === "y" ? "Si può salire con la bici." : d.b === "n" ? "Bici non ammesse." : "");
+      righe.push('<p class="fonte">Molti impianti d\'estate funzionano solo in alcuni mesi o nei fine settimana: controlla gli orari sul sito del gestore prima di partire.</p>');
+    }
+    if (d.k === "L") righe.push('<p class="fonte">Orari, telefono e sito vengono da OpenStreetMap e possono non essere aggiornati: nei giorni di festa e fuori stagione telefona prima.</p>');
     const tel = telefoni(d.t);
     if (tel.length) righe.push(`<p>Tel. ${tel.map((n) => `<a href="tel:${attr(n.replace(/[^\d+]/g, ""))}">${esc(n)}</a>`).join(" · ")}</p>`);
     if (d.w) righe.push(`<p><a href="${attr(sitoWeb(d.w))}" target="_blank" rel="noopener">Sito web</a></p>`);
-    righe.push(`<p>${QT.formattaDistanza(d.distanza)} in linea d'aria</p>`);
+    righe.push(`<p>${d.k === "F" ? "Stazione a valle a " : ""}${QT.formattaDistanza(d.distanza)} in linea d'aria</p>`);
     voce.push(distanzaParlata(d.distanza) + " in linea d'aria.");
     righe.push(`<p class="fonte">Fonte: OpenStreetMap · <a href="${attr(linkOsm(d))}" target="_blank" rel="noopener">Vedi su OpenStreetMap</a></p>`);
     if (d.k === "W") righe.push(`<div class="pop-foto" data-id="${attr(d.i)}"></div>`);
-    const pulsanti = [`<a class="pop-vai" href="${linkNavigazione(d.la, d.lo)}" target="_blank" rel="noopener">Portami qui</a>`];
+    const pulsanti = [`<a class="pop-vai" href="${linkNavigazione(d.la, d.lo)}" target="_blank" rel="noopener">${d.k === "F" ? "Portami alla partenza" : "Portami qui"}</a>`];
     if (tel.length) pulsanti.push(`<a class="pop-vai pop-chiama" href="tel:${attr(tel[0].replace(/[^\d+]/g, ""))}">Chiama</a>`);
     pulsanti.push(BOTTONE_MAPPA);
     return `<div class="pop" data-voce="${attr(voce.join(" "))}"><h3>${esc(tit)}</h3>${righe.join("")}
@@ -547,6 +562,7 @@
     }
     righe.push(`<div class="pop-num" data-num="${attr(s.i)}">${numeriSentiero(s, q)}</div>`);
     righe.push(`<div class="pop-profilo" data-prof="${attr(s.i)}">${profiloSvg(q)}</div>`);
+    righe.push(`<div class="pop-ristoro" data-ristoro="${attr(s.i)}"></div>`);
     if (s.o) righe.push(`<p>Gestito da ${esc(s.o)}</p>`);
     if (s.nota) righe.push(`<p>${esc(s.nota)}</p>`);
     righe.push(`<p>Il punto più vicino è a ${QT.formattaDistanza(s.distanza)} in linea d'aria</p>`);
@@ -838,6 +854,66 @@
   }
   function chiudiAnteprima() { if (anteprima) mappa.closePopup(anteprima); }
 
+  // ---------- Bar e ristoranti lungo il percorso ----------
+  // Locali a meno di 300 m dalla traccia. Con i dati del sito si leggono tutte le tessere che il percorso
+  // attraversa (anche fuori dal raggio); altrimenti si usano i punti già caricati.
+  async function localiSentiero(s) {
+    const visti = new Map();
+    for (const d of stato.punti || []) if (d.k === "L") visti.set(d.i, d);
+    const ind = indiceSito;
+    if (ind && ind.tessere) {
+      const passo = ind.passo || 0.1, esistenti = new Set(ind.tessere), nomi = new Set();
+      for (const l of s.g) for (const [la, lo] of l) {
+        // anche le tessere accanto: un locale può stare oltre il bordo, a pochi metri dal percorso
+        for (const di of [-1, 0, 1]) for (const dj of [-1, 0, 1]) {
+          const t = `t_${Math.floor(la / passo) + di}_${Math.floor(lo / passo) + dj}.json`;
+          if (esistenti.has(t)) nomi.add(t);
+        }
+      }
+      if (nomi.size <= 60) {
+        try {
+          for (const c of await leggiTessere([...nomi])) for (const d of c.p || []) if (d.k === "L") visti.set(d.i, d);
+        } catch (e) { console.warn("Tessere del percorso non disponibili", e); }
+      }
+    }
+    const out = [];
+    for (const d of visti.values()) {
+      const v = QT.distanzaDaTraccia(d.la, d.lo, s.g);
+      if (v.distanza <= QT.RAGGIO_RISTORO) out.push({ ...d, daSentiero: v.distanza, km: v.km });
+    }
+    return out.sort((a, b) => a.km - b.km);
+  }
+  async function riempiRistoro(corpo, s) {
+    const box = corpo.querySelector(".pop-ristoro");
+    if (!box) return;
+    const lista = await localiSentiero(s).catch(() => []);
+    if (!box.isConnected) return;
+    const quando = new Date();
+    const spezzato = s.g.length > 1;   // più tratti separati: i km dalla partenza non hanno senso
+    const righe = lista.slice(0, 30).map((d, n) => {
+      const st = d.h ? QT.statoApertura(d.h, quando) : null;
+      const ap = st ? `<span class="tag ${st.aperto ? "aperto" : "chiuso"}">${st.aperto ? "aperto adesso" : "chiuso adesso"}</span>` : "";
+      const dove = (spezzato ? "" : "km " + (d.km / 1000).toFixed(1).replace(".", ",") + " · ") +
+        (d.daSentiero < 30 ? "sul percorso" : "a " + QT.formattaDistanza(d.daSentiero) + " dal percorso");
+      return `<button type="button" class="rist-voce" data-n="${n}"><span class="mk tipo-L">${SIMBOLO.L}</span>` +
+        `<span class="rist-testo"><b>${esc(QT.titolo(d))}</b><span>${esc(QT.nomeTipo(d))} · ${esc(dove)}</span></span>${ap}</button>`;
+    });
+    if (!lista.length) {
+      box.innerHTML = `<p class="rist-vuoto">Nessun bar o ristorante a meno di ${QT.RAGGIO_RISTORO} m dal percorso (secondo OpenStreetMap).</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="rist-titolo"><b>Bar e ristoranti lungo il percorso</b><span>${lista.length} a meno di ${QT.RAGGIO_RISTORO} m` +
+      (spezzato ? "" : ", in ordine dalla partenza") + `</span></div>${righe.join("")}` +
+      (lista.length > 30 ? `<p class="rist-vuoto">… e altri ${lista.length - 30}: li vedi sulla mappa scegliendo “Bar e ristoranti”.</p>` : "");
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest(".rist-voce");
+      if (!b) return;
+      const d = lista[+b.dataset.n];
+      const c = stato.centro || stato.gps;
+      mostra({ ...d, distanza: c ? QT.distanza(c.lat, c.lon, d.la, d.lo) : d.daSentiero, apertura: d.h ? QT.statoApertura(d.h) : null });
+    });
+  }
+
   // ---------- Scheda: la terza pagina, dopo la mappa e l'elenco ----------
   const schedaAperta = () => !$("scheda").hidden;
   function apriScheda(html, titolo, s) {
@@ -851,6 +927,7 @@
     if (s) {
       if (s.su == null || !quoteCalcolate.has(s.i)) riempiQuote(corpo, s);
       preparaScarica(corpo, s);
+      riempiRistoro(corpo, s);
       const wa = corpo.querySelector(".pop-whatsapp");
       // il link si prepara al momento del tocco, con la mappa com'è adesso
       if (wa) wa.addEventListener("click", () => {
@@ -873,7 +950,7 @@
 
   // ---------- Rendering ----------
   // Ordine sulla mappa: acqua e attrezzi sopra, poi officine, ricariche e rifugi; gli aperti sopra i chiusi
-  const PESO = { W: 900, A: 800, N: 600, C: 500, R: 400 };
+  const PESO = { W: 900, A: 800, N: 600, C: 500, F: 450, R: 400, L: 300 };
 
   function render() {
     livelli.raggio.clearLayers();
@@ -924,6 +1001,7 @@
 
     const daMostrare = stato.viciniP.slice().sort((a, b) => a.distanza - b.distanza).slice(0, cfg.maxSegnaposto || 800);
     for (const d of daMostrare) {
+      if (d.tr) disegnaImpianto(d);
       const z = (PESO[d.k] || 0) + (d.apertura && !d.apertura.aperto ? -100 : 0);
       const m = L.marker([d.la, d.lo], { icon: icona(classiMarker(d), SIMBOLO[d.k]), title: QT.titolo(d), zIndexOffset: z })
         .on("click", () => mostra(d)).addTo(livelli.punti);
@@ -950,7 +1028,7 @@
     const li = document.createElement("li");
     li.className = "voce";
     li.tabIndex = 0;
-    const meta = [pastigliaTipo(s.k), pastiglia(s.d), `<span>${QT.formattaKm(s.l)}</span>`];
+    const meta = [pastigliaTipo(s.k), pastiglia(s.d), `<span class="voce-km">${QT.formattaKm(s.l)}</span>`];
     if (s.su != null) meta.push(`<span>↗ ${s.su} m</span>`);
     if (s.f) meta.push(barraFondo(s.f));
     const sotto = QT.sottotitoloSentiero(s);
@@ -1011,13 +1089,26 @@
     lista.slice(0, 250).forEach((x) => ol.appendChild(x.g ? voceSentiero(x) : vocePunto(x)));
   }
 
+  // Impianto a fune: linea scura sottile con le due stazioni
+  function disegnaImpianto(d) {
+    const colore = getComputedStyle(document.documentElement).getPropertyValue("--t-F").trim() || "#34424f";
+    L.polyline(d.tr, { renderer: tela, color: "#ffffff", weight: 6, opacity: .8, interactive: false }).addTo(livelli.punti);
+    L.polyline(d.tr, { renderer: tela, color: colore, weight: 3, opacity: 1, bubblingMouseEvents: false })
+      .on("click", () => mostra(d)).addTo(livelli.punti);
+    for (const p of [d.tr[0], d.tr[d.tr.length - 1]]) {
+      L.circleMarker(p, { renderer: tela, radius: 4, color: "#ffffff", weight: 2, fillColor: colore, fillOpacity: 1, interactive: false }).addTo(livelli.punti);
+    }
+  }
+
   // Punto: la mappa va sul punto e si apre la sua scheda
   function mostra(d) {
     if (!d) return;
     stato.seguiGps = false;
     scegliSentiero(null);
-    mappa.setView([d.la, d.lo], Math.max(mappa.getZoom(), 15));
+    if (d.tr) mappa.fitBounds(L.latLngBounds(d.tr), { padding: [40, 40], maxZoom: 16, animate: false });
+    else mappa.setView([d.la, d.lo], Math.max(mappa.getZoom(), 15));
     if (!markerPerId.has(d.i)) {
+      if (d.tr) disegnaImpianto(d);
       // fuori dai tipi scelti: segnaposto temporaneo
       const m = L.marker([d.la, d.lo], { icon: icona(classiMarker(d), SIMBOLO[d.k]), zIndexOffset: 2000 })
         .on("click", () => mostra(d)).addTo(livelli.punti);
@@ -1116,7 +1207,7 @@
     stato.gps = { lat, lon, acc };
     calcolaMoto(p);
     if (!marcatoreIo) {
-      marcatoreIo = L.marker([lat, lon], { icon: L.divIcon({ className: "", html: '<div class="io-box"><div class="io-cono" hidden></div><div class="io"></div></div>', iconSize: [18, 18] }), zIndexOffset: 3000, interactive: false }).addTo(livelli.io);
+      marcatoreIo = L.marker([lat, lon], { icon: L.divIcon({ className: "", html: '<div class="io-box"><div class="io-cono" hidden></div><div class="io"></div></div>', iconSize: [36, 36] }), zIndexOffset: 3000, interactive: false }).addTo(livelli.io);
       cerchioPrecisione = L.circle([lat, lon], { radius: acc, color: "#2f7cf6", weight: 0, fillOpacity: .12, interactive: false }).addTo(livelli.io);
     } else {
       marcatoreIo.setLatLng([lat, lon]);
@@ -1260,7 +1351,7 @@
 
   // Cosa mostrare: caselle per tipo di percorso, difficoltà e tipi di punti; la mappa cambia subito.
   // Un percorso si vede se sono scelti sia il suo tipo sia la sua difficoltà.
-  const BREVE = { W: "Fontanelle", A: "Colonnine", N: "Officine", C: "Ricariche", R: "Rifugi" };
+  const BREVE = { W: "Fontanelle", A: "Colonnine", N: "Officine", C: "Ricariche", R: "Rifugi", L: "Bar e ristoranti", F: "Funivie" };
   $("cat-tipi").innerHTML = QT.ORDINE_TIPI.map((k) =>
     `<label class="cat-voce"><input type="checkbox" value="T${k}"${stato.categorie.has("T" + k) ? " checked" : ""}>` +
     `${pastigliaTipo(k)}<span>${esc(QT.TIPI_PERCORSO[k].breve)}</span></label>`).join("");
@@ -1356,11 +1447,13 @@
     `<span><i class="f-${k}"></i>${esc(QT.FONDI[k].nome)}</span>`).join("");
   $("g-legenda").innerHTML = Object.entries(QT.TIPI).map(([k, t]) =>
     `<li><span class="g-segno"><span class="mk tipo-${k}">${SIMBOLO[k]}</span></span><div><b>${esc(t.nome)}</b>${{
-      W: ": fontanella di acqua potabile.",
+      W: ": fontanella di acqua potabile, a meno di 300 metri da un percorso.",
       A: ": colonnina pubblica con attrezzi e spesso una pompa, sempre disponibile.",
       N: ": negozio di bici o officina per le riparazioni (a volte anche noleggio).",
       C: ": punto di ricarica per e-bike.",
-      R: ": rifugio dove mangiare e bere nella stagione di apertura."
+      R: ": rifugio dove mangiare e bere nella stagione di apertura.",
+      L: ": bar, ristorante, pub o agriturismo a meno di 300 metri da un percorso. Si vedono scegliendo “Bar e ristoranti” nel menu; nella scheda di ogni percorso c'è l'elenco di quelli lungo il tracciato.",
+      F: ": funivia, cabinovia, seggiovia o funicolare. Sulla mappa è una linea scura dalla stazione a valle (dove sta il simbolo) a quella a monte; nella scheda c'è scritto se si può salire con la bici. Si vedono scegliendo “Funivie e seggiovie” nel menu."
     }[k] || "."}</div></li>`).join("");
 
   let tornaA = null;
