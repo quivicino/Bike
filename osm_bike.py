@@ -21,8 +21,8 @@ Invio:   con il token GitHub in token.txt (nella cartella dello script, come osm
 Uso:     py -3.12 osm_bike.py [percorso/italy-latest.osm.pbf]
          senza percorso scarica il PBF da Geofabrik (circa 2 GB) nella cartella di questo script, se non c'è
          già una copia di meno di 20 ore. Con --senza-invio crea solo il file, senza caricarlo.
-Aggiornamento: all'avvio scarica da GitHub l'ultima versione di questo script e, se è cambiata, la salva al
-         suo posto e la usa (così le modifiche di Qui-Bike arrivano da sole). Con --senza-aggiornare no.
+Aggiornamento: lo script NON si aggiorna da solo, così il codice che gira con il token cambia solo quando lo
+         decide paolo. Con --aggiorna scarica da GitHub l'ultima versione, la salva al suo posto e la usa.
 """
 import gzip
 import json
@@ -292,7 +292,7 @@ def vicino(el, celle):
 
 def aggiorna_script():
     """Scarica l'ultima versione dello script da GitHub; se è cambiata la salva e la lancia al posto di questa."""
-    if "--senza-aggiornare" in sys.argv or os.environ.get("OSM_BIKE_AGGIORNATO"):
+    if "--aggiorna" not in sys.argv or os.environ.get("OSM_BIKE_AGGIORNATO"):
         return
     try:
         with urllib.request.urlopen(urllib.request.Request(SCRIPT_URL, headers={"User-Agent": "Qui-Bike osm_bike.py"}),
