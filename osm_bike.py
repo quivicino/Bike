@@ -5,7 +5,8 @@ Qui-Bike – copia di tutta l'Italia, da far girare ogni giorno sul computer di 
 Legge il PBF Italia di Geofabrik ed estrae gli stessi oggetti che l'app chiede a Overpass:
   - i percorsi in bici (relazioni route=mtb e route=bicycle) con la geometria delle loro vie;
   - i tag delle vie dei percorsi che servono per fondo e difficoltà (highway, surface, tracktype, mtb:scale);
-  - fontanelle, colonnine attrezzi, negozi e officine bici, ricariche e-bike e rifugi.
+  - colonnine attrezzi, negozi e officine bici, ricariche e-bike, rifugi, funivie e seggiovie (con la traccia);
+  - fontanelle e bar, ristoranti e agriturismi, solo vicino ai percorsi (il controllo preciso dei 300 m lo fa il sito).
 Scrive bike.json.gz nello stesso formato di una risposta di Overpass, lo carica sulla release «dati-osm»
 del repository quivicino/Bike e fa ripartire la pubblicazione del sito, che lo trasforma nelle tessere dell'app
 (aggiorna_percorsi.js). Se la copia manca o ha più di 3 giorni, il sito torna alle regioni scaricate da Overpass.
@@ -20,6 +21,8 @@ Invio:   con il token GitHub in token.txt (nella cartella dello script, come osm
 Uso:     py -3.12 osm_bike.py [percorso/italy-latest.osm.pbf]
          senza percorso scarica il PBF da Geofabrik (circa 2 GB) nella cartella di questo script, se non c'è
          già una copia di meno di 20 ore. Con --senza-invio crea solo il file, senza caricarlo.
+Aggiornamento: all'avvio scarica da GitHub l'ultima versione di questo script e, se è cambiata, la salva al
+         suo posto e la usa (così le modifiche di Qui-Bike arrivano da sole). Con --senza-aggiornare no.
 """
 import gzip
 import json
@@ -42,13 +45,28 @@ TAG_VIE = ("highway", "surface", "tracktype", "mtb:scale")
 FILTRO = [("route", "mtb"), ("route", "bicycle"), ("amenity", "drinking_water"), ("amenity", "water_point"),
           ("amenity", "fountain"), ("amenity", "bicycle_repair_station"), ("shop", "bicycle"),
           ("craft", "bicycle_repair"), ("amenity", "bicycle_rental"), ("amenity", "charging_station"),
-          ("tourism", "alpine_hut")]
+          ("tourism", "alpine_hut"), ("amenity", "restaurant"), ("amenity", "cafe"), ("amenity", "bar"),
+          ("amenity", "pub"), ("agriturismo", "yes"), ("guest_house", "agritourism"), ("aerialway", "cable_car"),
+          ("aerialway", "gondola"), ("aerialway", "mixed_lift"), ("aerialway", "chair_lift"), ("railway", "funicular")]
+SOLO_VICINO = {"L", "W"}            # tenuti solo vicino ai percorsi
+CELLA = 0.005                      # griglia per il filtro grossolano «vicino ai percorsi» (circa 550 × 400 m)
+SCRIPT_URL = "https://raw.githubusercontent.com/quivicino/Bike/main/osm_bike.py"
 MAX_PARTE = 150 * 1024 * 1024      # oltre questa misura (JSON non compresso) si apre una nuova parte:
                                    # Node non legge testi più lunghi di circa 500 MB
 
 
+def tipo_impianto(t):
+    if t.get("disused") == "yes" or t.get("abandoned") == "yes" or t.get("construction") or t.get("proposed") or \
+            "progett" in (t.get("name") or "").lower():
+        return None
+    if t.get("railway") == "funicular" or t.get("aerialway") in ("cable_car", "gondola", "mixed_lift", "chair_lift"):
+        return "F"
+    return None
+
+
 def tipo_punto(t):
-    """Come tipoDaTag in core.js: W fontanella, A colonnina attrezzi, N negozio/officina, C ricarica, R rifugio."""
+    """Come tipoDaTag in core.js: W fontanella, A colonnina attrezzi, N negozio/officina, C ricarica, R rifugio,
+    L bar/ristorante/agriturismo, F impianto a fune."""
     a = t.get("amenity")
     if a == "drinking_water" or (a == "fountain" and t.get("drinking_water") == "yes") or \
             (a == "water_point" and t.get("drinking_water") != "no"):
@@ -62,7 +80,9 @@ def tipo_punto(t):
         return "C"
     if t.get("tourism") == "alpine_hut":
         return "R"
-    return None
+    if t.get("agriturismo") == "yes" or t.get("guest_house") == "agritourism" or a in ("restaurant", "cafe", "bar", "pub"):
+        return "L"
+    return tipo_impianto(t)
 
 
 class Percorsi(osmium.SimpleHandler):
@@ -117,7 +137,11 @@ class VieEPunti(osmium.SimpleHandler):
             tv = {k: w.tags[k] for k in TAG_VIE if k in w.tags}
             if tv:
                 self.tag[w.id] = tv
-        if punto and coord:
+        if punto == "F":
+            if len(coord) >= 2:
+                self.punti.append({"type": "way", "id": w.id, "tags": {k.k: k.v for k in w.tags},
+                                   "geometry": [{"lat": la, "lon": lo} for la, lo in coord]})
+        elif punto and coord:
             la = sum(c[0] for c in coord) / len(coord)
             lo = sum(c[1] for c in coord) / len(coord)
             self.punti.append({"type": "way", "id": w.id, "center": {"lat": round(la, 7), "lon": round(lo, 7)},
@@ -246,7 +270,53 @@ def invia_con_gh(file):
     gh("workflow", "run", "pubblica.yml", "-R", REPO, "--ref", "main")
 
 
+def celle_percorsi(geometrie):
+    """Celle della griglia (con le 8 accanto) toccate dalle vie dei percorsi, con un punto ogni circa 200 m."""
+    celle = set()
+    for g in geometrie:
+        for (la1, lo1), (la2, lo2) in zip(g, g[1:] or g):
+            passi = max(1, int(max(abs(la2 - la1), abs(lo2 - lo1)) / 0.002))
+            for k in range(passi + 1):
+                i = int((la1 + (la2 - la1) * k / passi) // CELLA)
+                j = int((lo1 + (lo2 - lo1) * k / passi) // CELLA)
+                for di in (-1, 0, 1):
+                    for dj in (-1, 0, 1):
+                        celle.add((i + di, j + dj))
+    return celle
+
+
+def vicino(el, celle):
+    c = el.get("center") or el
+    return (int(c["lat"] // CELLA), int(c["lon"] // CELLA)) in celle
+
+
+def aggiorna_script():
+    """Scarica l'ultima versione dello script da GitHub; se è cambiata la salva e la lancia al posto di questa."""
+    if "--senza-aggiornare" in sys.argv or os.environ.get("OSM_BIKE_AGGIORNATO"):
+        return
+    try:
+        with urllib.request.urlopen(urllib.request.Request(SCRIPT_URL, headers={"User-Agent": "Qui-Bike osm_bike.py"}),
+                                    timeout=60) as r:
+            nuovo = r.read()
+        questo = os.path.abspath(__file__)
+        with open(questo, "rb") as f:
+            vecchio = f.read()
+        if nuovo.replace(b"\r\n", b"\n") == vecchio.replace(b"\r\n", b"\n"):
+            return
+        compile(nuovo, questo, "exec")     # se non è Python valido non si tocca niente
+        with open(questo + ".nuovo", "wb") as f:
+            f.write(nuovo)
+        os.replace(questo + ".nuovo", questo)
+        print("Script aggiornato all'ultima versione di GitHub: riparto con quella.", flush=True)
+    except Exception as e:
+        print(f"Aggiornamento dello script non riuscito ({e}): uso questa versione.", flush=True)
+        return
+    ambiente = dict(os.environ, OSM_BIKE_AGGIORNATO="1")
+    sys.exit(subprocess.run([sys.executable, os.path.abspath(__file__), *sys.argv[1:]], env=ambiente).returncode)
+
+
 def main():
+    aggiorna_script()
     argomenti = [a for a in sys.argv[1:] if not a.startswith("--")]
     pbf = prendi_pbf(argomenti[0] if argomenti else None)
     base = data_osm(pbf)
@@ -275,7 +345,10 @@ def main():
             membri.append(m)
         elementi.append({"type": "relation", "id": r["id"], "members": membri, "tags": r["tags"]})
     elementi.extend({"type": "way", "id": i, "tags": t} for i, t in v.tag.items())
-    elementi.extend(v.punti)
+    celle = celle_percorsi(v.geometria.values())
+    tenuti = [el for el in v.punti if tipo_punto(el["tags"]) not in SOLO_VICINO or vicino(el, celle)]
+    print(f"Punti tenuti: {len(tenuti)} (scartati {len(v.punti) - len(tenuti)} fontanelle e locali lontani dai percorsi)", flush=True)
+    elementi.extend(tenuti)
 
     file = scrivi(elementi, base, CARTELLA)
     print(f"Fatto in {(time.time() - inizio) / 60:.1f} minuti", flush=True)

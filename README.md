@@ -16,8 +16,13 @@ funzionamento di [Qui-Trekking](https://github.com/quivicino/Trekking) e delle a
   quota minima e massima, **pendenza massima** su tratti di almeno 200 m, profilo altimetrico e **tempo in bici**
   (12 km/h su sentiero, 16 su sterrato, 20 su asfalto, più un'ora ogni 500 m di salita);
 - percorsi **ad anello** (tag `roundtrip=yes`, o partenza e arrivo a meno di 300 m), con il filtro «Solo ad anello»;
-- punti utili: **fontanelle**, **colonnine attrezzi** (`amenity=bicycle_repair_station`), **negozi e officine bici**
-  (`shop=bicycle`, `craft=bicycle_repair`), **ricariche e-bike** (`amenity=charging_station` + `bicycle=yes`), **rifugi**.
+- punti utili: **fontanelle** (solo a meno di 300 m da un percorso), **colonnine attrezzi** (`amenity=bicycle_repair_station`), **negozi e officine bici**
+  (`shop=bicycle`, `craft=bicycle_repair`), **ricariche e-bike** (`amenity=charging_station` + `bicycle=yes`), **rifugi**;
+- **bar e ristoranti** (`amenity=restaurant|cafe|bar|pub`) e **agriturismi** (`agriturismo=yes` o `guest_house=agritourism`):
+  come le fontanelle, solo quelli a meno di **300 m** da un percorso. Voce «Bar e ristoranti» nel menu, spenta all'inizio;
+  nella scheda di ogni percorso l'elenco dei locali lungo il tracciato, con i km dalla partenza;
+- **funivie, cabinovie, seggiovie** (`aerialway=cable_car|gondola|chair_lift|mixed_lift`) e **funicolari** (`railway=funicular`):
+  linea sulla mappa e scheda con lunghezza, durata, posti e se si può salire con la bici (`aerialway:bicycle`). Spente all'inizio.
 
 ## Come funziona
 

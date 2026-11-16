@@ -107,8 +107,32 @@
     A: { nome: "Colonnina attrezzi", plurale: "Colonnine attrezzi e pompa" },
     N: { nome: "Negozio e officina bici", plurale: "Negozi e officine bici" },
     C: { nome: "Ricarica e-bike", plurale: "Ricariche e-bike" },
-    R: { nome: "Rifugio", plurale: "Rifugi" }
+    R: { nome: "Rifugio", plurale: "Rifugi" },
+    L: { nome: "Bar o ristorante", plurale: "Bar e ristoranti" },
+    F: { nome: "Impianto a fune", plurale: "Funivie e seggiovie" }
   };
+  // Impianti a fune (funivie, cabinovie, seggiovie, funicolari): sono linee, salvate come un punto alla
+  // stazione a valle (il primo punto della via: su OSM gli impianti si disegnano dal basso verso l'alto)
+  // con la traccia in "tr" (non "g", che nell'app vuol dire percorso). Sciovie e skilift no.
+  const IMPIANTI = { f: "Funivia", g: "Cabinovia", m: "Impianto misto (seggiovia e cabinovia)", s: "Seggiovia", u: "Funicolare" };
+  const DA_AERIALWAY = { cable_car: "f", gondola: "g", mixed_lift: "m", chair_lift: "s" };
+  function tipoImpianto(t) {
+    // in progetto, in costruzione o dismessi: no
+    if (t.disused === "yes" || t.abandoned === "yes" || t.construction || t.proposed || /\bprogett/i.test(t.name || "")) return null;
+    if (t.railway === "funicular") return "u";
+    return DA_AERIALWAY[t.aerialway] || null;
+  }
+  // Bar, ristoranti e agriturismi: si tengono solo quelli a meno di RAGGIO_RISTORO metri da un percorso
+  // (in Italia sono più di 150.000, quasi tutti in città). "y" = che locale è.
+  const RAGGIO_RISTORO = 300;
+  // Tipi di punto tenuti solo vicino ai percorsi (entro RAGGIO_RISTORO): bar e ristoranti, fontanelle
+  const SOLO_VICINO = new Set(["L", "W"]);
+  const LOCALI = { r: "Ristorante", b: "Bar", c: "Caffè", p: "Pub", a: "Agriturismo" };
+  const DA_AMENITY = { restaurant: "r", bar: "b", cafe: "c", pub: "p" };
+  function tipoLocale(t) {
+    if (t.agriturismo === "yes" || t.guest_house === "agritourism") return "a";
+    return DA_AMENITY[t.amenity] || null;
+  }
 
   /** Codice del tipo di punto a partire dai tag OSM, oppure null se non interessa. */
   function tipoDaTag(t) {
@@ -119,6 +143,8 @@
     if (t.shop === "bicycle" || t.craft === "bicycle_repair" || t.amenity === "bicycle_rental" && t["service:bicycle:repair"] === "yes") return "N";
     if (t.amenity === "charging_station" && (t.bicycle === "yes" || t["socket:schuko"] || /e-?bike/i.test(t.name || ""))) return "C";
     if (t.tourism === "alpine_hut") return "R";
+    if (tipoLocale(t)) return "L";
+    if (tipoImpianto(t)) return "F";
     return null;
   }
 
@@ -127,10 +153,17 @@
     const t = el.tags || {};
     const k = tipoDaTag(t);
     if (!k) return null;
-    const la = el.lat ?? (el.center && el.center.lat);
-    const lo = el.lon ?? (el.center && el.center.lon);
+    let g = null;
+    if (k === "F") {
+      // solo vie con la traccia (out geom): punto alla stazione a valle
+      g = (el.geometry || []).filter(Boolean).map((x) => [+x.lat.toFixed(5), +x.lon.toFixed(5)]);
+      if (el.type !== "way" || g.length < 2) return null;
+    }
+    const la = g ? g[0][0] : el.lat ?? (el.center && el.center.lat);
+    const lo = g ? g[0][1] : el.lon ?? (el.center && el.center.lon);
     if (la == null || lo == null) return null;
     const p = { i: el.type[0] + el.id, k, la: +la.toFixed(6), lo: +lo.toFixed(6) };
+    if (g) { p.tr = g; p.l = Math.round(lunghezzaLinea(g)); }
     const metti = (chiave, v) => { v = String(v ?? "").trim(); if (v) p[chiave] = v; };
     metti("n", t.name || t["name:it"]);
     metti("q", parseFloat(String(t.ele || "").replace(",", ".")) ? Math.round(parseFloat(String(t.ele).replace(",", "."))) : "");
@@ -139,6 +172,17 @@
     metti("w", t.website || t["contact:website"] || t.url);
     metti("o", t.operator);
     if (k === "R") metti("p", t.beds || t.capacity);
+    if (k === "L") metti("y", tipoLocale(t));
+    if (k === "F") {
+      metti("y", tipoImpianto(t));
+      metti("d", t["aerialway:duration"] || t.duration);
+      metti("c", t["aerialway:occupancy"] || t.occupancy);
+      metti("v", t["aerialway:capacity"]);
+      // bici: "y" se si possono portare, "n" se no (aerialway:bicycle o bicycle)
+      const bici = t["aerialway:bicycle"] || t.bicycle;
+      if (bici === "yes" || bici === "summer" || bici === "designated") p.b = "y";
+      else if (bici === "no") p.b = "n";
+    }
     const info = [];
     if (k === "R") {
       if (t.drinking_water === "yes") info.push("acqua potabile");
@@ -160,6 +204,16 @@
     if (k === "C") {
       if (t.fee === "no") info.push("gratuita");
       if (t.capacity) info.push("posti: " + t.capacity);
+    }
+    if (k === "L") {
+      if (t.outdoor_seating === "yes") info.push("posti all'aperto");
+      if (t.cuisine === "regional" || t.cuisine === "italian;regional") info.push("cucina regionale");
+      if (t.cuisine === "pizza") info.push("pizzeria");
+      if (t.bicycle_parking || t["service:bicycle:parking"] === "yes") info.push("posteggio bici");
+    }
+    if (k === "F") {
+      if (t["aerialway:bubble"] === "yes") info.push("con cupola paravento");
+      if (t.dog === "yes") info.push("cani ammessi");
     }
     if (k === "W") {
       if (t.drinking_water === "no") info.push("acqua non potabile");
@@ -403,6 +457,64 @@
       if (d < dmin) { dmin = d; best = p; }
     }
     return { punto: best, distanza: dmin };
+  }
+
+  // ---------- Distanza dalla traccia ----------
+  // Distanza in metri del punto (lat, lon) dal segmento a-b (coordinate piane locali: va bene per poche centinaia di metri)
+  function distanzaSegmento(lat, lon, a, b) {
+    const kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110540;
+    const ax = (a[1] - lon) * kx, ay = (a[0] - lat) * ky, bx = (b[1] - lon) * kx, by = (b[0] - lat) * ky;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    return { d: Math.hypot(ax + t * dx, ay + t * dy), t };
+  }
+  /** Distanza dalla traccia (lista di linee [[lat, lon], ...]) e metri dall'inizio del punto più vicino ("km"). */
+  function distanzaDaTraccia(lat, lon, linee) {
+    let best = Infinity, km = 0, fatto = 0;
+    for (const l of linee || []) {
+      for (let i = 0; i < l.length; i++) {
+        const b = l[i], a = i ? l[i - 1] : b;
+        const seg = i ? distanza(a[0], a[1], b[0], b[1]) : 0;
+        const r = distanzaSegmento(lat, lon, a, b);
+        if (r.d < best) { best = r.d; km = fatto + r.t * seg; }
+        fatto += seg;
+      }
+    }
+    return { distanza: best, km };
+  }
+  /**
+   * Id dei punti a meno di "metri" da almeno una delle linee (percorsi). Si indicizzano i punti in una griglia
+   * e si scorrono le linee una volta sola: va bene anche per tutta l'Italia (milioni di segmenti).
+   * punti: [{i, la, lo}], linee: iterabile di [[lat, lon], ...]
+   */
+  function vicinoAiSentieri(punti, linee, metri) {
+    metri = metri || RAGGIO_RISTORO;
+    const CELLA = 0.01;   // circa 1,1 × 0,8 km
+    const griglia = new Map();
+    for (const p of punti) {
+      const c = Math.floor(p.la / CELLA) + ":" + Math.floor(p.lo / CELLA);
+      if (!griglia.has(c)) griglia.set(c, []);
+      griglia.get(c).push(p);
+    }
+    const vicini = new Set();
+    if (!griglia.size) return vicini;
+    const mLat = metri / 110540;
+    for (const l of linee) {
+      for (let i = 0; i < l.length; i++) {
+        const a = l[i ? i - 1 : 0], b = l[i];
+        const mLon = metri / (111320 * Math.cos(b[0] * Math.PI / 180));
+        const i0 = Math.floor((Math.min(a[0], b[0]) - mLat) / CELLA), i1 = Math.floor((Math.max(a[0], b[0]) + mLat) / CELLA);
+        const j0 = Math.floor((Math.min(a[1], b[1]) - mLon) / CELLA), j1 = Math.floor((Math.max(a[1], b[1]) + mLon) / CELLA);
+        for (let ci = i0; ci <= i1; ci++) {
+          for (let cj = j0; cj <= j1; cj++) {
+            const lista = griglia.get(ci + ":" + cj);
+            if (!lista) continue;
+            for (const p of lista) if (!vicini.has(p.i) && distanzaSegmento(p.la, p.lo, a, b).d <= metri) vicini.add(p.i);
+          }
+        }
+      }
+    }
+    return vicini;
   }
 
   // ---------- Guida sul sentiero ----------
@@ -687,15 +799,22 @@
   }
   // Percorsi MTB e ciclabili (locali, regionali, nazionali ed EuroVelo come VENTO), i tag delle loro vie
   // (per fondo e difficoltà) e i punti utili, in un riquadro
+  // Bar, ristoranti, agriturismi e fontanelle solo a meno di RAGGIO_RISTORO metri dalle vie dei percorsi (around).
   function queryOverpass(bbox, timeout) {
     const b = `(${bbox.join(",")})`;
+    const vicino = `${b}(around.vie:${RAGGIO_RISTORO})`;
     return `[out:json][timeout:${timeout || 90}][maxsize:400000000];` +
       `relation${b}[type=route][route~"^(mtb|bicycle)$"]->.p;.p out geom${b};` +
-      `way(r.p)${b};out tags;` +
+      `way(r.p)->.vie;way.vie${b};out tags;` +
+      `nwr[amenity~"^(restaurant|cafe|bar|pub)$"]${vicino};out center tags;` +
+      `nwr[agriturismo=yes]${vicino};out center tags;` +
+      `nwr[guest_house=agritourism]${vicino};out center tags;` +
+      `(way${b}[aerialway~"^(cable_car|gondola|mixed_lift|chair_lift)$"];way${b}[railway=funicular];);out tags geom;` +
+      `(node[amenity=drinking_water]${vicino};` +
+      `node[amenity=water_point]${vicino};` +
+      `node[amenity=fountain][drinking_water=yes]${vicino};` +
+      `);out center tags;` +
       `(nwr${b}[tourism=alpine_hut];` +
-      `node${b}[amenity=drinking_water];` +
-      `node${b}[amenity=water_point];` +
-      `node${b}[amenity=fountain][drinking_water=yes];` +
       `nwr${b}[amenity=bicycle_repair_station];` +
       `nwr${b}[shop=bicycle];` +
       `nwr${b}[craft=bicycle_repair];` +
@@ -707,7 +826,7 @@
   // Tag delle vie, presi dalla risposta (le vie con tag ma senza geometria)
   function tagVie(elementi) {
     const m = new Map();
-    for (const el of elementi || []) if (el.type === "way" && el.tags && !el.center) m.set(el.id, el.tags);
+    for (const el of elementi || []) if (el.type === "way" && el.tags && !el.center && !el.geometry) m.set(el.id, el.tags);
     return m;
   }
   const ePercorso = (el) => el.type === "relation" && el.tags && /^(mtb|bicycle)$/.test(el.tags.route);
@@ -719,8 +838,8 @@
       if (ePercorso(el)) {
         const s = compattaSentiero(el, vieTag);
         if (s) sentieri.push(s);
-      } else if (el.type === "way" && !el.center) {
-        continue;
+      } else if (el.type === "way" && !el.center && !el.geometry) {
+        continue;   // vie dei percorsi: solo i tag (impianti a fune: con la traccia)
       } else {
         const p = compatta(el);
         if (p) punti.push(p);
@@ -765,7 +884,16 @@
     }
     return s;
   }
-  const nomeTipo = (d) => TIPI[d.k].nome;
+  const nomeTipo = (d) => (d.k === "L" && LOCALI[d.y]) || (d.k === "F" && IMPIANTI[d.y]) || TIPI[d.k].nome;
+  /** Durata della corsa di un impianto (aerialway:duration: minuti, "mm:ss" o "hh:mm:ss") in testo. */
+  function durataCorsa(v) {
+    v = String(v || "").trim();
+    let m = v.match(/^(\d+(?:[.,]\d+)?)$/);
+    if (m) return Math.round(parseFloat(m[1].replace(",", "."))) + " min";
+    m = v.match(/^(?:(\d+):)?(\d+):(\d\d)$/);
+    if (m) { const min = (+m[1] || 0) * 60 + +m[2] + (+m[3] >= 30 ? 1 : 0); return (min || 1) + " min"; }
+    return v;
+  }
   const titolo = (d) => capitalizza(d.n) || nomeTipo(d);
 
 
@@ -862,7 +990,7 @@
   const API = {
     distanza, formattaDistanza, formattaKm, formattaQuota, formattaOre, DIFFICOLTA, ORDINE_DIFF, difficolta, livelloMtb,
     FONDI, fondoVia, TIPI_PERCORSO, ORDINE_TIPI, tipoPercorso, tagVie, ePercorso,
-    TIPI, tipoDaTag, compatta, leggiSimbolo, svgSimbolo, SIMBOLO_CAI, unisciTratti, lunghezzaLinea, metriDaTag, minutiDaTag,
+    TIPI, RAGGIO_RISTORO, SOLO_VICINO, LOCALI, IMPIANTI, durataCorsa, tipoDaTag, compatta, distanzaDaTraccia, vicinoAiSentieri, leggiSimbolo, svgSimbolo, SIMBOLO_CAI, unisciTratti, lunghezzaLinea, metriDaTag, minutiDaTag,
     compattaSentiero, puntoPiuVicino, rotta, scartoRotte, puntoCardinale, guidaSentiero, estremita, campioni, dislivello, pendenzaMax, tempoStimato, titoloSentiero, sottotitoloSentiero,
     leggiOrari, statoApertura, testoApertura, orariLeggibili, riquadro, queryOverpass, leggiRisposta,
     preparaPunti, prepareSentieri, capitalizza, nomeTipo, titolo,
