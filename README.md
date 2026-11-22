@@ -43,6 +43,10 @@ funzionamento di [Qui-Trekking](https://github.com/quivicino/Trekking) e delle a
 - Toccando un percorso si apre la sua **scheda**; da lì: navigazione sul percorso (velocità e freccia), «In auto alla partenza»,
   Street View agli estremi, **Scarica il percorso** (GPX, KML, GeoJSON, dal sito MTB o cycling di Waymarked Trails) e
   **Invia Percorso con WhatsApp** (link `?s=percorso&c=centro&v=lat,lon,zoom&r=raggio&k=cosa mostrare&f=filtri&o=ordine&b=mappa`).
+- **Da A a B** (pulsante sotto Aggiorna): percorso in bici tra due posti, cercati con Nominatim. Mountain bike con
+  [BRouter](https://brouter.de) (profili in `profiliMtb` di config.js, poi `trekking`, poi OSRM), strada e gravel con
+  [OSRM bici](https://routing.openstreetmap.de) (se non risponde BRouter `fastbike`). Barra con km, salita (quote di BRouter
+  o di Open-Meteo) e tempo stimato; toccando la linea: profilo, pendenza massima, **Salva GPX** e «Pedala sul percorso».
 - Pulsanti in basso: **attrezzi** (colonnina o officina aperta più vicina) e **fontanella** più vicina.
 - Statistiche d'uso anonime, senza cookie, con [GoatCounter](https://www.goatcounter.com): https://quibike.goatcounter.com
   (da creare con lo stesso login delle altre app).
