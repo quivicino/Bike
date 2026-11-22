@@ -693,3 +693,77 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .installa-ok { border: 0; background: var(--blu); color: var(--su-colore); }
 @media (prefers-reduced-motion: reduce) { .installa { animation: none; } }
 
+
+/* ---- Percorso in bici da A a B ---- */
+.fab[aria-pressed="true"] { background: var(--blu); color: var(--su-colore); }
+.percorso-barra {
+  position: absolute; left: 16px; right: 80px; top: 16px; z-index: 900;
+  display: flex; align-items: stretch; max-width: 520px;
+  border-radius: 24px; background: var(--superficie); box-shadow: var(--ombra); overflow: hidden;
+}
+.percorso-barra[hidden] { display: none; }
+.percorso-testo {
+  flex: 1; min-width: 0; border: 0; background: none; text-align: left; color: var(--testo);
+  padding: 6px 4px 6px 16px; min-height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.percorso-testo b, .percorso-testo span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.percorso-testo b { font: 700 17px/1.15 var(--font-display); }
+.percorso-testo span { font: 600 15px/1.15 var(--font-body); color: var(--testo-2); font-variant-numeric: tabular-nums; }
+.percorso-mod, .percorso-esci {
+  flex: none; width: 44px; border: 0; background: none; color: var(--testo-2); display: grid; place-items: center;
+}
+.percorso-esci { width: 48px; }
+.percorso {
+  position: absolute; left: 12px; right: 12px; top: 12px; z-index: 1100;
+  max-width: 460px; margin: 0;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 16px 12px; border-radius: 18px;
+  background: var(--superficie); color: var(--testo); box-shadow: var(--ombra);
+  animation: entra .2s ease-out;
+}
+.percorso[hidden] { display: none; }
+.percorso-testa { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.percorso-testa h2 { margin: 0; font: 700 22px/1.1 var(--font-display); }
+.percorso-testa .chiudi { width: 38px; height: 38px; }
+.percorso-campi { display: flex; align-items: center; gap: 8px; }
+.percorso-righe { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.percorso .campo { display: flex; align-items: center; gap: 8px; }
+.percorso .campo input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 12px;
+  border: 1px solid var(--bordo); border-radius: 10px;
+  background: var(--bg); color: var(--testo); font: 500 17px var(--font-body);
+}
+.percorso .campo input:focus { outline: 2px solid var(--blu); outline-offset: 0; background: var(--superficie); }
+.perc-inverti {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0;
+  display: grid; place-items: center; background: var(--bg); color: var(--blu);
+}
+.perc-pin {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  font: 700 15px/1 var(--font-display); color: #fff; border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+.perc-pin.da { background: var(--libero); }
+.perc-pin.a { background: var(--pieno); }
+.percorso-opz { font-size: 15px; color: var(--testo-2); }
+.percorso-opz label { display: flex; align-items: center; gap: 10px; }
+.percorso-opz select {
+  flex: 1; min-width: 0; height: 42px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--bordo);
+  background: var(--superficie); color: var(--testo); font: 600 16px var(--font-body);
+}
+.btn-perc-vai {
+  height: 50px; border: 0; border-radius: 12px;
+  background: var(--blu); color: var(--su-colore); font: 700 19px/1 var(--font-display); letter-spacing: .02em;
+}
+.btn-perc-vai:disabled { opacity: .7; cursor: progress; }
+.perc-errore { margin: 0; color: var(--pieno); font-weight: 600; font-size: 15px; }
+.perc-nota { margin: 0; font-size: 12px; color: var(--testo-2); }
+.pop-percorso-ab .leaflet-popup-content { margin: 14px 16px; }
+.pop-ab-tit { display: block; font: 700 21px/1.15 var(--font-display); }
+.pop-ab-sotto { display: block; font-size: 14px; color: var(--testo-2); margin-top: 2px; }
+.pop-ab-num { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.pop-ab-num span { display: flex; flex-direction: column; font-size: 13px; color: var(--testo-2); line-height: 1.2; }
+.pop-ab-num b { font: 700 19px/1.1 var(--font-display); color: var(--testo); font-variant-numeric: tabular-nums; }
+.pop .pop-ab button.pop-vai, .pop-ab button.pop-vai { width: 100%; border: 0; margin-top: 10px; font-size: 18px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pop-ab .pop-ab-gpx { background: var(--superficie); color: var(--blu); border: 2px solid var(--blu) !important; }
+@media (prefers-reduced-motion: reduce) { .percorso { animation: none; } }
