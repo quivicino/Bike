@@ -44,7 +44,7 @@ funzionamento di [Qui-Trekking](https://github.com/quivicino/Trekking) e delle a
   Street View agli estremi, **Scarica il percorso** (GPX, KML, GeoJSON, dal sito MTB o cycling di Waymarked Trails) e
   **Invia Percorso con WhatsApp** (link `?s=percorso&c=centro&v=lat,lon,zoom&r=raggio&k=cosa mostrare&f=filtri&o=ordine&b=mappa`).
 - **Da A a B** (pulsante sotto Aggiorna): percorso in bici tra due posti, cercati con Nominatim. Mountain bike con
-  [BRouter](https://brouter.de) (profili in `profiliMtb` di config.js, poi `trekking`, poi OSRM), strada e gravel con
+  [BRouter](https://brouter.de) (profili in `profiliMtb` di config.js, ora `trekking` perché brouter.de non ha un profilo MTB standard; se non risponde OSRM), strada e gravel con
   [OSRM bici](https://routing.openstreetmap.de) (se non risponde BRouter `fastbike`). Barra con km, salita (quote di BRouter
   o di Open-Meteo) e tempo stimato; toccando la linea: profilo, pendenza massima, **Salva GPX** e «Pedala sul percorso».
 - Pulsanti in basso: **attrezzi** (colonnina o officina aperta più vicina) e **fontanella** più vicina.

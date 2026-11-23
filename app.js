@@ -1166,7 +1166,7 @@
     const quote = c.map((p) => p[2]);
     return {
       punti: c.map(([lon, lat]) => [lat, lon]), metri: +pr["track-length"] || QT.lunghezzaLinea(c.map(([lon, lat]) => [lat, lon])),
-      quote: quote.every((q) => isFinite(q)) ? quote : null,
+      quote: c.length > 1 && quote.every((q) => typeof q === "number" && isFinite(q)) ? quote : null,
       fonte: "BRouter" + (/^mtb/.test(profilo) ? " (profilo MTB)" : " (profilo " + profilo + ")")
     };
   }
@@ -1174,7 +1174,7 @@
   // Bici: OSRM, se non risponde BRouter con il profilo veloce.
   async function calcolaAB(da, a, bici) {
     const prove = bici === "mtb"
-      ? (cfg.profiliMtb || ["mtb-zossebart", "trekking"]).map((p) => () => viaBrouter(da, a, p)).concat(() => viaOsrm(da, a))
+      ? (cfg.profiliMtb || ["trekking"]).map((p) => () => viaBrouter(da, a, p)).concat(() => viaOsrm(da, a))
       : [() => viaOsrm(da, a), () => viaBrouter(da, a, "fastbike")];
     let errore;
     for (const prova of prove) {
@@ -1189,11 +1189,16 @@
     if (c.length < 2) return null;
     let quote;
     if (r.quote) {
-      // la quota del punto della traccia più vicino a ogni campione (le due liste sono nello stesso ordine)
+      // quota interpolata alla distanza dalla partenza di ogni campione (la traccia può tornare indietro e
+      // girare su sé stessa: si va per chilometri percorsi, non per il punto più vicino)
+      const cum = [0];
+      for (let i = 1; i < r.punti.length; i++) cum.push(cum[i - 1] + QT.distanza(r.punti[i - 1][0], r.punti[i - 1][1], r.punti[i][0], r.punti[i][1]));
       let j = 0;
       quote = c.map((p) => {
-        while (j < r.punti.length - 1 && QT.distanza(p.la, p.lo, r.punti[j + 1][0], r.punti[j + 1][1]) <= QT.distanza(p.la, p.lo, r.punti[j][0], r.punti[j][1])) j++;
-        return r.quote[j];
+        while (j < cum.length - 2 && cum[j + 1] < p.km) j++;
+        const tratto = cum[j + 1] - cum[j];
+        const f = tratto > 0 ? Math.min(1, Math.max(0, (p.km - cum[j]) / tratto)) : 0;
+        return r.quote[j] + (r.quote[j + 1] - r.quote[j]) * f;
       });
     } else {
       const url = cfg.quote + "?latitude=" + c.map((p) => p.la.toFixed(5)).join(",") + "&longitude=" + c.map((p) => p.lo.toFixed(5)).join(",");
