@@ -3,7 +3,7 @@
  */
 window.QT_CONFIG = {
   // Versione dell'app, mostrata in fondo alla pagina Elenco. Aumentala a ogni aggiornamento.
-  versione: "7",
+  versione: "8",
 
   // Raggio di ricerca iniziale in metri (modificabile anche dall'app)
   raggioMetri: 15000,
@@ -30,10 +30,11 @@ window.QT_CONFIG = {
   quote: "https://api.open-meteo.com/v1/elevation",
 
   // Percorso in bici da A a B (gratuiti, dati OpenStreetMap): OSRM bici per strada e gravel, BRouter per la mountain bike.
-  // Profili BRouter MTB in ordine: se il primo non c'è sul server si prova il successivo.
+  // Profili BRouter per la mountain bike, in ordine: se il primo non c'è sul server si prova il successivo.
+  // brouter.de non ha un profilo MTB tra quelli standard: si usa trekking (sterrati e ciclabili, salite evitate).
   osrmBici: "https://routing.openstreetmap.de/routed-bike",
   brouter: "https://brouter.de/brouter",
-  profiliMtb: ["mtb-zossebart", "trekking"],
+  profiliMtb: ["trekking"],
 
   // Auto-refresh a ogni avvio, in secondi (0 = spento: l'app riparte dall'ultima posizione). Si cambia dalla pagina elenco, solo per quella volta.
   autoRefreshSecondi: 0
