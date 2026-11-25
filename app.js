@@ -11,6 +11,7 @@
   const salvaPref = (k, v) => { try { localStorage.setItem(PREF + k, String(v)); } catch (e) { /* ignora */ } };
 
   const RAGGI = [2000, 5000, 10000, 15000, 25000];
+  let mostraNumeri = leggiPref("numeri", "1") !== "0";
   const stato = {
     gps: null,          // ultima posizione GPS {lat, lon, acc}
     centro: null,       // punto della ricerca {lat, lon, daGps}
@@ -23,7 +24,8 @@
     viciniP: [],        // punti entro il raggio, con distanza e apertura
     filtri: new Set(),
     caricando: false,
-    seguiGps: true
+    seguiGps: true,
+    percorso: null      // percorso in bici da A a B: { punti, quote, dist, metri, su, giu, fondo, da, a, bici }
   };
   if (!RAGGI.includes(stato.raggio)) stato.raggio = 15000;
   const CHIAVI_DIFF = QT.ORDINE_DIFF.map((d) => "D" + d);
@@ -102,7 +104,6 @@
     sentieri: L.layerGroup().addTo(mappa),
     etichette: L.layerGroup().addTo(mappa),
     punti: L.layerGroup().addTo(mappa),
-    ab: L.layerGroup().addTo(mappa),      // percorso in bici da A a B
     scelto: L.layerGroup().addTo(mappa),   // sentiero scelto che non è tra quelli disegnati
     guida: L.layerGroup().addTo(mappa),   // linea tratteggiata da te al sentiero scelto
     io: L.layerGroup().addTo(mappa)
@@ -266,6 +267,19 @@
     const parti = await Promise.all(mancanti.map((t) => fetchJson("dati/" + t, {}, 30000)));
     mancanti.forEach((t, i) => tessereSito.set(t, parti[i]));
     return nomi.map((t) => tessereSito.get(t));
+  }
+  // Tessere scelte (tra quelle esistenti) con i percorsi che vi passano ma sono salvati altrove
+  async function daTessere(esistenti, base) {
+    const nomi = base.filter((t) => esistenti.has(t));
+    const vicine = await leggiTessere(nomi);
+    const altrove = new Set();
+    for (const c of vicine) for (const casa of Object.values(c.r || {})) if (!nomi.includes(casa) && esistenti.has(casa)) altrove.add(casa);
+    const lontane = await leggiTessere([...altrove]);
+    const servono = new Set(vicine.flatMap((c) => [...(c.s || []).map((x) => x.i), ...Object.keys(c.r || {})]));
+    return {
+      sentieri: vicine.concat(lontane).flatMap((c) => c.s || []).filter((x) => servono.delete(x.i)),
+      punti: vicine.flatMap((c) => c.p || [])
+    };
   }
   async function dalSito(lat, lon, raggio, forza) {
     const ind = await leggiIndice(forza);
@@ -453,6 +467,26 @@
   const BOTTONE_MAPPA = '<button type="button" class="pop-vai pop-mappa">Vedi sulla mappa</button>';
   const BOTTONE_CAMMINA = '<button type="button" class="pop-vai pop-mappa">Pedala sul percorso</button>';
 
+  // Webcam entro 300 m da un rifugio (d.wc = [[link, metri], …]). Un'immagine .jpg/.png
+  // su https si vede nella scheda (ricaricata a ogni apertura); una pagina o un'immagine http si apre fuori.
+  function bloccoWebcam(wc) {
+    const ora = Math.floor(Date.now() / 60000);
+    const voci = wc.map(([u, m]) => {
+      const dove = m < 20 ? "sul posto" : `a ${Math.round(m / 10) * 10} m`;
+      const immagine = /^https:/.test(u) && /\.(jpe?g|png|webp)(\?|$)|\/image\.jpg|\/current\//i.test(u);
+      if (immagine) {
+        const src = u + (u.includes("?") ? "&" : "?") + "t=" + ora;
+        return `<figure class="pop-webcam"><a href="${attr(src)}" target="_blank" rel="noopener">
+          <img src="${attr(src)}" alt="Immagine della webcam" loading="lazy" onerror="this.closest('figure').classList.add('rotta')"></a>
+          <figcaption>Webcam ${dove} · <a href="${attr(src)}" target="_blank" rel="noopener">ingrandisci</a></figcaption>
+          <p class="rotta-testo">Immagine non disponibile ora · <a href="${attr(u)}" target="_blank" rel="noopener">prova ad aprirla</a></p></figure>`;
+      }
+      return `<a class="pop-webcam-link" href="${attr(u)}" target="_blank" rel="noopener">📷 Apri la webcam <span>${dove} · sito esterno</span></a>`;
+    });
+    return `<div class="pop-webcam-box"><b>Webcam qui vicino</b>${voci.join("")}
+      <p class="fonte">Immagini dei rispettivi siti: possono essere ferme o non aggiornate.</p></div>`;
+  }
+
   function popupPunto(d) {
     const tit = QT.titolo(d);
     const tipo = QT.nomeTipo(d);
@@ -493,12 +527,14 @@
     const tel = telefoni(d.t);
     if (tel.length) righe.push(`<p>Tel. ${tel.map((n) => `<a href="tel:${attr(n.replace(/[^\d+]/g, ""))}">${esc(n)}</a>`).join(" · ")}</p>`);
     if (d.w) righe.push(`<p><a href="${attr(sitoWeb(d.w))}" target="_blank" rel="noopener">Sito web</a></p>`);
+    if (d.wc && d.wc.length) righe.push(bloccoWebcam(d.wc));
     righe.push(`<p>${d.k === "F" ? "Stazione a valle a " : ""}${QT.formattaDistanza(d.distanza)} in linea d'aria</p>`);
     voce.push(distanzaParlata(d.distanza) + " in linea d'aria.");
     righe.push(`<p class="fonte">Fonte: OpenStreetMap · <a href="${attr(linkOsm(d))}" target="_blank" rel="noopener">Vedi su OpenStreetMap</a></p>`);
     if (d.k === "W") righe.push(`<div class="pop-foto" data-id="${attr(d.i)}"></div>`);
     const pulsanti = [`<a class="pop-vai" href="${linkNavigazione(d.la, d.lo)}" target="_blank" rel="noopener">${d.k === "F" ? "Portami alla partenza" : "Portami qui"}</a>`];
     if (tel.length) pulsanti.push(`<a class="pop-vai pop-chiama" href="tel:${attr(tel[0].replace(/[^\d+]/g, ""))}">Chiama</a>`);
+    pulsanti.push(`<button type="button" class="pop-vai pop-inbici" data-lat="${d.la}" data-lon="${d.lo}" data-nome="${attr(tit)}">In bici fin qui</button>`);
     pulsanti.push(BOTTONE_MAPPA);
     return `<div class="pop" data-voce="${attr(voce.join(" "))}"><h3>${esc(tit)}</h3>${righe.join("")}
       <div class="pop-pulsanti">${pulsanti.join("")}</div></div>`;
@@ -800,7 +836,7 @@
   }
 
   // ---------- Percorso evidenziato ----------
-  // Il percorso scelto resta evidenziato, intero, anche dopo aver chiuso la scheda; si toglie solo con Esci nel riquadro di navigazione.
+  // Il percorso scelto resta evidenziato, intero, anche dopo aver chiuso la scheda; si toglie solo con la X nel riquadro di navigazione.
   let evidenziato = null, scelto = null;
   function evidenzia(id) {
     if (evidenziato === id) return;
@@ -813,14 +849,14 @@
       if (su) { v.bordo.forEach((l) => l.bringToFront()); v.linee.forEach((l) => l.bringToFront()); }
     }
   }
-  // Con un sentiero scelto si è "in navigazione": si esce solo con il pulsante Esci del riquadro (esci = true),
+  // Con un sentiero scelto si è "in navigazione": si esce solo con la X del riquadro (esci = true),
   // non toccando la mappa né aprendo un punto. Scegliere un altro sentiero passa a quello.
   function scegliSentiero(s, esci) {
     if (!s && scelto && !esci) return;
     scelto = s || null;
     livelli.scelto.clearLayers();
     // non disegnato (fuori dalle difficoltà scelte o dai filtri): lo si disegna a parte
-    if (s && !s.ab && !lineePerId.has(s.i)) {
+    if (s && !s.percorso && !lineePerId.has(s.i)) {
       s.g.forEach((l) => L.polyline(l, { renderer: tela, color: "#ffffff", weight: 11, opacity: .85, interactive: false }).addTo(livelli.scelto));
       s.g.forEach((l) => L.polyline(l, { renderer: tela, color: coloreDiff(s.d), weight: 7, interactive: false }).addTo(livelli.scelto));
     }
@@ -987,7 +1023,7 @@
       }).on("click", tocca).addTo(livelli.sentieri));
       // segnavia col numero a metà del tratto più lungo
       let etichetta = null;
-      if (s.r || s.sim) {
+      if ((s.r || s.sim) && mostraNumeri) {
         const l = s.g[0];
         const m = l[Math.floor(l.length / 2)];
         etichetta = L.marker(m, {
@@ -1132,221 +1168,6 @@
     apriScheda(popupSentiero(s), "Percorso", s);
   }
 
-  // ---------- Percorso in bici da A a B ----------
-  // Scrivi partenza e arrivo: la strada la calcola OSRM bici (bici da strada e gravel) o BRouter (mountain bike),
-  // due servizi gratuiti con i dati di OpenStreetMap. Linea sulla mappa con A e B, km, dislivello e tempo;
-  // toccando la linea: profilo, file GPX e "Pedala sul percorso" (la stessa guida dei sentieri).
-  const BICI_AB = {
-    bici: { nome: "Bici da strada o gravel", fonte: "OSRM bici", fondo: { a: 100, s: 0, p: 0, n: 0 } },
-    mtb: { nome: "Mountain bike", fonte: "BRouter MTB", fondo: { a: 20, s: 50, p: 30, n: 0 } }
-  };
-  let percorsoAB = null;   // { punti, metri, su, giu, serie, minuti, da, a, daGps, bici, fonte }
-  const paneAB = mappa.createPane("percorsoAB");
-  paneAB.style.zIndex = 450;   // sopra i sentieri, sotto i segnaposto
-
-  async function geocodifica(q) {
-    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&accept-language=it&q=" + encodeURIComponent(q);
-    const [primo] = await fetchJson(url, { headers: { Accept: "application/json" } }, 12000);
-    if (!primo) return null;
-    const nome = (primo.name || String(primo.display_name || q).split(",")[0] || q).trim();
-    return { lat: +primo.lat, lon: +primo.lon, nome };
-  }
-  const coord = (p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`;
-  async function viaOsrm(da, a) {
-    const r = await fetchJson(`${cfg.osrmBici}/route/v1/driving/${coord(da)};${coord(a)}?overview=full&geometries=geojson`, {}, 20000);
-    if (!r || r.code !== "Ok" || !r.routes || !r.routes.length) throw new Error("OSRM: percorso non trovato");
-    const rt = r.routes[0];
-    return { punti: rt.geometry.coordinates.map(([lon, lat]) => [lat, lon]), metri: rt.distance, fonte: "OSRM bici" };
-  }
-  async function viaBrouter(da, a, profilo) {
-    const r = await fetchJson(`${cfg.brouter}?lonlats=${coord(da)}|${coord(a)}&profile=${profilo}&alternativeidx=0&format=geojson`, {}, 25000);
-    const f = r && r.features && r.features[0];
-    if (!f || !f.geometry || !f.geometry.coordinates || f.geometry.coordinates.length < 2) throw new Error("BRouter: percorso non trovato");
-    const c = f.geometry.coordinates, pr = f.properties || {};
-    const quote = c.map((p) => p[2]);
-    return {
-      punti: c.map(([lon, lat]) => [lat, lon]), metri: +pr["track-length"] || QT.lunghezzaLinea(c.map(([lon, lat]) => [lat, lon])),
-      quote: c.length > 1 && quote.every((q) => typeof q === "number" && isFinite(q)) ? quote : null,
-      fonte: "BRouter" + (/^mtb/.test(profilo) ? " (profilo MTB)" : " (profilo " + profilo + ")")
-    };
-  }
-  // MTB: BRouter con i profili mountain bike, se non risponde il profilo trekking, alla fine OSRM.
-  // Bici: OSRM, se non risponde BRouter con il profilo veloce.
-  async function calcolaAB(da, a, bici) {
-    const prove = bici === "mtb"
-      ? (cfg.profiliMtb || ["trekking"]).map((p) => () => viaBrouter(da, a, p)).concat(() => viaOsrm(da, a))
-      : [() => viaOsrm(da, a), () => viaBrouter(da, a, "fastbike")];
-    let errore;
-    for (const prova of prove) {
-      try { return await prova(); } catch (e) { errore = e; console.warn("Percorso A-B", e); }
-    }
-    throw errore;
-  }
-  // Quote: da BRouter quando le dà, altrimenti 100 punti chiesti a Open-Meteo
-  async function quoteAB(r) {
-    const linea = { g: [r.punti] };
-    const c = QT.campioni(linea, 100);
-    if (c.length < 2) return null;
-    let quote;
-    if (r.quote) {
-      // quota interpolata alla distanza dalla partenza di ogni campione (la traccia può tornare indietro e
-      // girare su sé stessa: si va per chilometri percorsi, non per il punto più vicino)
-      const cum = [0];
-      for (let i = 1; i < r.punti.length; i++) cum.push(cum[i - 1] + QT.distanza(r.punti[i - 1][0], r.punti[i - 1][1], r.punti[i][0], r.punti[i][1]));
-      let j = 0;
-      quote = c.map((p) => {
-        while (j < cum.length - 2 && cum[j + 1] < p.km) j++;
-        const tratto = cum[j + 1] - cum[j];
-        const f = tratto > 0 ? Math.min(1, Math.max(0, (p.km - cum[j]) / tratto)) : 0;
-        return r.quote[j] + (r.quote[j + 1] - r.quote[j]) * f;
-      });
-    } else {
-      const url = cfg.quote + "?latitude=" + c.map((p) => p.la.toFixed(5)).join(",") + "&longitude=" + c.map((p) => p.lo.toFixed(5)).join(",");
-      quote = (await fetchJson(url, {}, 15000)).elevation || [];
-    }
-    const d = QT.dislivello(quote, null);
-    if (!d) return null;
-    d.serie = quote.filter((h) => isFinite(h)).map((h) => Math.round(h));
-    d.pend = QT.pendenzaMax(quote, c);
-    return d;
-  }
-
-  const testoAB = (p) => (p.daGps ? "Verso " + p.a : p.da + " → " + p.a);
-  const numeriAB = (p) => [QT.formattaKm(p.metri), p.su != null ? "↑ " + QT.formattaQuota(p.su) : null, QT.formattaOre(p.minuti)].filter(Boolean).join(" · ");
-  function disegnaAB() {
-    livelli.ab.clearLayers();
-    const p = percorsoAB;
-    if (!p) return;
-    const opz = { pane: "percorsoAB" };
-    L.polyline(p.punti, { ...opz, color: "#fff", weight: 10, opacity: .95, interactive: false }).addTo(livelli.ab);
-    const linea = L.polyline(p.punti, { ...opz, color: getComputedStyle(document.documentElement).getPropertyValue("--blu").trim() || "#8c33ff", weight: 6, opacity: .95 }).addTo(livelli.ab);
-    // linea "larga" invisibile: si tocca più facilmente con il dito
-    L.polyline(p.punti, { ...opz, color: "#000", weight: 26, opacity: 0 }).addTo(livelli.ab).on("click", apriPopupAB);
-    linea.on("click", apriPopupAB);
-    const pin = (cls, t) => L.divIcon({ className: "", html: `<div class="perc-pin ${cls}">${t}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
-    L.marker(p.punti[0], { icon: pin("da", "A"), interactive: false, zIndexOffset: 900 }).addTo(livelli.ab);
-    L.marker(p.punti[p.punti.length - 1], { icon: pin("a", "B"), interactive: false, zIndexOffset: 900 }).addTo(livelli.ab);
-  }
-  function apriPopupAB(e) {
-    if (e) L.DomEvent.stopPropagation(e);
-    const p = percorsoAB;
-    if (!p) return;
-    const caselle = [[QT.formattaKm(p.metri), "lunghezza"]];
-    if (p.su != null) caselle.push(["↑ " + QT.formattaQuota(p.su), "salita"], ["↓ " + QT.formattaQuota(p.giu), "discesa"]);
-    caselle.push([QT.formattaOre(p.minuti), "tempo stimato"]);
-    if (p.pend != null) caselle.push([p.pend + "%", "pendenza max"]);
-    const div = document.createElement("div");
-    div.className = "pop pop-ab";
-    div.innerHTML = `<b class="pop-ab-tit">${esc(testoAB(p))}</b>
-      <small class="pop-ab-sotto">${esc(BICI_AB[p.bici].nome)} · calcolato da ${esc(p.fonte)}</small>
-      <div class="pop-ab-num">${caselle.map(([v, t]) => `<span><b>${esc(v)}</b>${esc(t)}</span>`).join("")}</div>
-      ${profiloSvg(p)}
-      <button type="button" class="pop-vai pop-ab-pedala">Pedala sul percorso</button>
-      <button type="button" class="pop-vai pop-ab-gpx">${ICONA_SCARICA}Salva GPX</button>`;
-    div.querySelector(".pop-ab-pedala").addEventListener("click", () => {
-      mappa.closePopup();
-      scegliSentiero({ i: "AB", ab: true, g: [p.punti] });
-      if (stato.gps) mappa.setView([stato.gps.lat, stato.gps.lon], Math.max(mappa.getZoom(), 15));
-    });
-    div.querySelector(".pop-ab-gpx").addEventListener("click", () => {
-      const nome = testoAB(p).replace("→", "-");
-      consegnaFile(QT.fileTraccia([p.punti], nome, "gpx", { fonte: "Dati © OpenStreetMap (ODbL) via " + p.fonte }), QT.nomeFile(nome, "gpx"), QT.FORMATI.gpx.tipo);
-      if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: "percorso-ab-gpx", title: "Percorso A-B GPX", event: true });
-    });
-    L.DomEvent.disableClickPropagation(div);
-    const dove = e && e.latlng ? e.latlng : p.punti[Math.floor(p.punti.length / 2)];
-    L.popup({ className: "pop-percorso-ab", maxWidth: 280, autoPanPaddingTopLeft: [10, 84], autoPanPaddingBottomRight: [72, 16] }).setLatLng(dove).setContent(div).openOn(mappa);
-  }
-  function aggiornaBarraAB() {
-    const p = percorsoAB;
-    $("percorso-barra").hidden = !p;
-    $("btn-percorso").setAttribute("aria-pressed", String(!!p));
-    if (p) $("percorso-testo").innerHTML = `<b>${esc(testoAB(p))}</b><span>${esc(numeriAB(p))}</span>`;
-  }
-  function apriPercorso() {
-    $("percorso").hidden = false;
-    $("btn-percorso").setAttribute("aria-expanded", "true");
-    const a = $("perc-a");
-    setTimeout(() => (a.value ? $("btn-perc-vai") : a).focus(), 50);
-  }
-  function chiudiFormPercorso() {
-    if ($("percorso").hidden) return false;
-    $("percorso").hidden = true;
-    $("btn-percorso").setAttribute("aria-expanded", "false");
-    return true;
-  }
-  function chiudiPercorsoAB() {
-    if (scelto && scelto.ab) scegliSentiero(null, true);
-    percorsoAB = null;
-    mappa.closePopup();
-    disegnaAB();
-    aggiornaBarraAB();
-  }
-  const zoomSuAB = () => { if (percorsoAB) { stato.seguiGps = false; mappa.fitBounds(L.latLngBounds(percorsoAB.punti), { padding: [40, 40] }); } };
-
-  $("perc-da").value = leggiPref("percDa", "");
-  $("perc-a").value = leggiPref("percA", "");
-  $("perc-bici").value = leggiPref("percBici", "mtb");
-  if (!$("perc-bici").value) $("perc-bici").value = "mtb";
-
-  $("percorso").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const testoDa = $("perc-da").value.trim(), testoA = $("perc-a").value.trim();
-    if (!testoA) { $("perc-a").focus(); return; }
-    const bici = $("perc-bici").value === "bici" ? "bici" : "mtb";
-    salvaPref("percDa", testoDa); salvaPref("percA", testoA); salvaPref("percBici", bici);
-    const vai = $("btn-perc-vai");
-    const avviso = (t) => { $("perc-errore").textContent = t; $("perc-errore").hidden = !t; };
-    avviso("");
-    vai.disabled = true;
-    vai.textContent = "Calcolo il percorso…";
-    try {
-      let da;
-      if (!testoDa || /^(la )?mia posizione$|^qui$/i.test(testoDa)) {
-        if (!stato.gps) { avviso("Posizione non ancora disponibile: scrivi anche da dove parti."); return; }
-        da = { lat: stato.gps.lat, lon: stato.gps.lon, nome: "la tua posizione", gps: true };
-      } else {
-        da = await geocodifica(testoDa);
-        if (!da) { avviso("Partenza non trovata. Prova ad aggiungere la città."); return; }
-      }
-      const a = await geocodifica(testoA);
-      if (!a) { avviso("Arrivo non trovato. Prova ad aggiungere la città."); return; }
-      const r = await calcolaAB(da, a, bici);
-      if (scelto && scelto.ab) scegliSentiero(null, true);
-      percorsoAB = { punti: r.punti, metri: r.metri, su: null, giu: null, pend: null, serie: null,
-        minuti: QT.tempoStimato(r.metri, 0, 0, BICI_AB[bici].fondo), da: da.nome, a: a.nome, daGps: !!da.gps, bici, fonte: r.fonte };
-      chiudiFormPercorso();
-      mappa.closePopup();
-      disegnaAB();
-      aggiornaBarraAB();
-      zoomSuAB();
-      if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: "percorso-ab-" + bici, title: "Percorso A-B " + BICI_AB[bici].nome, event: true });
-      // dislivello e tempo con la salita arrivano dopo, senza far aspettare la linea
-      const questo = percorsoAB;
-      quoteAB(r).then((q) => {
-        if (!q || percorsoAB !== questo) return;
-        Object.assign(questo, { su: q.su, giu: q.giu, pend: q.pend, serie: q.serie, minuti: QT.tempoStimato(r.metri, q.su, q.giu, BICI_AB[bici].fondo) });
-        aggiornaBarraAB();
-      }).catch((err) => console.warn("Quote del percorso A-B non disponibili", err));
-    } catch (err) {
-      console.warn("Percorso non calcolato", err);
-      avviso("Non riesco a calcolare il percorso. Controlla la connessione e riprova.");
-    } finally {
-      vai.disabled = false;
-      vai.textContent = "Calcola il percorso";
-    }
-  });
-  $("btn-percorso").addEventListener("click", () => { if (!chiudiFormPercorso()) apriPercorso(); });
-  $("btn-chiudi-form-percorso").addEventListener("click", chiudiFormPercorso);
-  $("percorso-testo").addEventListener("click", () => { zoomSuAB(); apriPopupAB(); });
-  $("btn-modifica-percorso").addEventListener("click", apriPercorso);
-  $("btn-esci-percorso").addEventListener("click", () => { chiudiFormPercorso(); chiudiPercorsoAB(); });
-  $("btn-perc-inverti").addEventListener("click", () => {
-    const x = $("perc-da").value; $("perc-da").value = $("perc-a").value; $("perc-a").value = x;
-  });
-  L.DomEvent.disableClickPropagation($("percorso"));
-  L.DomEvent.disableClickPropagation($("percorso-barra"));
-
   // ---------- Posizione ----------
   let marcatoreIo, cerchioPrecisione;
 
@@ -1415,8 +1236,467 @@
     }
   }
 
-  $("guida-esci").addEventListener("click", (e) => { e.stopPropagation(); scegliSentiero(null, true); });
+  // Esci: termina la navigazione; se stavi seguendo il percorso in bici, chiude anche quello
+  $("guida-esci").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (scelto && scelto.percorso) chiudiPercorso();
+    else {
+      scegliSentiero(null, true);
+      // lasciato il percorso dell'app, se c'è un percorso A-B la freccia torna a guidare lungo quello
+      if (stato.percorso) scegliSentiero(stato.percorso.sentiero);
+    }
+  });
   L.DomEvent.disableClickPropagation($("guida-rotta"));
+
+  // ---------- Percorso in bici da A a B ----------
+  // Come in Qui-Trekking: scrivi partenza e arrivo (o sceglili sulla mappa). Mountain bike: BRouter (gratuito,
+  // senza chiave, profili in cfg.profiliMtb); strada e gravel: OSRM bici (routing.openstreetmap.de). Sulla mappa
+  // la linea fucsia con A e B, in basso il riquadro con il profilo altimetrico e i percorsi dell'app usati;
+  // la freccia del riquadro di navigazione guida lungo il percorso come su un percorso dell'app.
+  const COLORE_PERCORSO = "#d61f8c";
+  // un colore per ogni percorso dell'app usato (riquadro, profilo e mappa); i tratti fuori restano fucsia
+  const COLORI_SENTIERI = ["#1565c0", "#ef6c00", "#00897b", "#7b1fa2", "#c62828", "#2e7d32", "#5d4037", "#0097a7"];
+  const coloreSentiero = (k) => (k >= 0 ? COLORI_SENTIERI[k % COLORI_SENTIERI.length] : COLORE_PERCORSO);
+  let gruppoTratti = null;
+  // Sulla mappa: i tratti di ogni percorso usato, ciascuno con il suo colore, sopra la linea fucsia
+  function coloraTratti(p) {
+    if (!gruppoTratti) gruppoTratti = L.layerGroup();
+    gruppoTratti.clearLayers();
+    livelli.percorso.addLayer(gruppoTratti);
+    const seg = p.seg || [];
+    let i = 1;
+    while (i < p.punti.length) {
+      const k = seg[i];
+      let j = i;
+      while (j + 1 < p.punti.length && seg[j + 1] === k) j++;
+      if (k >= 0) L.polyline(p.punti.slice(i - 1, j + 1), { color: coloreSentiero(k), weight: 6, opacity: .95, interactive: false }).addTo(gruppoTratti);
+      i = j + 1;
+    }
+  }
+  const percorsoAttivo = () => stato.percorso || null;
+  livelli.percorso = L.layerGroup().addTo(mappa);
+  livelli.percorso.setZIndex && livelli.percorso.setZIndex(5);
+  let lineaPercorso = null, puntoProfilo = null;
+
+  // "lat, lon" scritti a mano (anche con la virgola decimale: 45,85 9,39)
+  function leggiCoordinate(t) {
+    const m = /^\s*(-?\d{1,2}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)\s*$/.exec(t);
+    if (!m) return null;
+    const lat = +m[1].replace(",", "."), lon = +m[2].replace(",", ".");
+    return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon, nome: lat.toFixed(5) + ", " + lon.toFixed(5) } : null;
+  }
+  async function geocodifica(q) {
+    const c = leggiCoordinate(q);
+    if (c) return c;
+    // si preferiscono i risultati vicini alla zona della mappa (paesi e rifugi con lo stesso nome sono tanti)
+    const b = mappa.getBounds().pad(1);
+    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&accept-language=it" +
+      `&viewbox=${b.getWest().toFixed(4)},${b.getNorth().toFixed(4)},${b.getEast().toFixed(4)},${b.getSouth().toFixed(4)}&q=` + encodeURIComponent(q);
+    const [primo] = await fetchJson(url, { headers: { Accept: "application/json" } }, 12000);
+    if (!primo) return null;
+    const nome = (primo.name || String(primo.display_name || q).split(",")[0] || q).trim();
+    return { lat: +primo.lat, lon: +primo.lon, nome };
+  }
+
+  const BICI_AB = {
+    mtb: { nome: "Mountain bike", fondo: { a: 20, s: 50, p: 30, n: 0 } },
+    bici: { nome: "Strada o gravel", fondo: { a: 100, s: 0, p: 0, n: 0 } }
+  };
+  const coord = (p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`;
+  async function chiediBrouter(da, a, profilo) {
+    const url = `${cfg.brouter}?lonlats=${coord(da)}|${coord(a)}&profile=${encodeURIComponent(profilo)}&alternativeidx=0&format=geojson`;
+    const r = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(40000) : undefined });
+    const testo = await r.text();
+    let dati = null;
+    try { dati = JSON.parse(testo); } catch (e) { /* BRouter risponde con un testo quando non trova il percorso */ }
+    const p = dati && QT.leggiBrouter(dati);
+    if (!p) throw new Error(testo.slice(0, 200) || "percorso non trovato");
+    p.fonte = "BRouter";
+    return p;
+  }
+  // OSRM non dà le quote: arrivano dopo da Open-Meteo (quoteOsrm)
+  async function chiediOsrm(da, a) {
+    const r = await fetchJson(`${cfg.osrmBici}/route/v1/driving/${coord(da)};${coord(a)}?overview=full&geometries=geojson`, {}, 25000);
+    if (!r || r.code !== "Ok" || !r.routes || !r.routes.length) throw new Error("OSRM: percorso non trovato");
+    const punti = r.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+    const dist = [0];
+    for (let i = 1; i < punti.length; i++) dist.push(dist[i - 1] + QT.distanza(punti[i - 1][0], punti[i - 1][1], punti[i][0], punti[i][1]));
+    return { punti, quote: punti.map(() => null), dist, metri: r.routes[0].distance || dist[dist.length - 1], su: null, giu: null, min: null, max: null,
+      fondo: { sentiero: 0, sterrata: 0, strada: 0 }, segnati: 0, tratti: null, fonte: "OSRM bici", senzaQuote: true };
+  }
+  // 100 quote lungo il percorso da Open-Meteo, poi interpolate su tutti i punti per km percorsi
+  async function quoteOsrm(p) {
+    const tot = p.dist[p.dist.length - 1];
+    if (!(tot > 0)) return;
+    const N = 100, cam = [];
+    let j = 0;
+    for (let k = 0; k < N; k++) {
+      const m = tot * k / (N - 1);
+      while (j < p.dist.length - 2 && p.dist[j + 1] < m) j++;
+      const f = Math.min(1, Math.max(0, (m - p.dist[j]) / ((p.dist[j + 1] - p.dist[j]) || 1)));
+      const a = p.punti[j], b = p.punti[Math.min(j + 1, p.punti.length - 1)];
+      cam.push({ m, la: a[0] + (b[0] - a[0]) * f, lo: a[1] + (b[1] - a[1]) * f });
+    }
+    const url = cfg.quote + "?latitude=" + cam.map((c) => c.la.toFixed(5)).join(",") + "&longitude=" + cam.map((c) => c.lo.toFixed(5)).join(",");
+    const q = (await fetchJson(url, {}, 15000)).elevation || [];
+    if (q.length !== N || !q.every((x) => isFinite(x))) return;
+    let k = 0;
+    p.quote = p.dist.map((m) => {
+      while (k < N - 2 && cam[k + 1].m < m) k++;
+      const f = Math.min(1, Math.max(0, (m - cam[k].m) / ((cam[k + 1].m - cam[k].m) || 1)));
+      return Math.round(q[k] + (q[k + 1] - q[k]) * f);
+    });
+    const d = QT.dislivello(q, null) || {};
+    Object.assign(p, { su: d.su ?? null, giu: d.giu ?? null, min: d.min ?? null, max: d.max ?? null, senzaQuote: false });
+  }
+  // Mountain bike: BRouter con i profili di config.js, se non risponde OSRM. Strada e gravel: OSRM, se no BRouter «fastbike».
+  async function calcolaPercorso(da, a, bici) {
+    const prove = bici === "mtb"
+      ? (cfg.profiliMtb || ["trekking"]).map((pr) => () => chiediBrouter(da, a, pr)).concat(() => chiediOsrm(da, a))
+      : [() => chiediOsrm(da, a), () => chiediBrouter(da, a, "fastbike")];
+    let errore;
+    for (const prova of prove) {
+      try { return await prova(); } catch (e) { errore = e; console.warn("Percorso in bici", e); }
+    }
+    throw errore;
+  }
+
+  // Campi A e B: il testo scritto, oppure un punto preciso (scelto sulla mappa o da una scheda) in data-lat/data-lon
+  function puntoCampo(id) {
+    const el = $(id), t = el.value.trim();
+    if (el.dataset.lat && t === el.dataset.nome) return { lat: +el.dataset.lat, lon: +el.dataset.lon, nome: t };
+    return t ? { testo: t } : null;
+  }
+  function impostaCampo(id, p) {
+    const el = $(id);
+    if (p && p.lat != null) { el.value = p.nome; el.dataset.lat = p.lat; el.dataset.lon = p.lon; el.dataset.nome = p.nome; }
+    else { el.value = p ? p.testo || "" : ""; delete el.dataset.lat; delete el.dataset.lon; delete el.dataset.nome; }
+  }
+  ["perc-da", "perc-a"].forEach((id) => {
+    try { const v = JSON.parse(leggiPref(id === "perc-da" ? "percDa" : "percA", "null")); if (v) impostaCampo(id, v); } catch (e) { /* ignora */ }
+  });
+  $("perc-bici").value = leggiPref("percBici", "mtb");
+  if (!$("perc-bici").value) $("perc-bici").value = "mtb";
+
+  function apriPercorso() {
+    chiudiAnteprima();
+    chiudiVai();
+    $("percorso").hidden = false;
+    $("btn-percorso").setAttribute("aria-expanded", "true");
+    const a = $("perc-a");
+    setTimeout(() => (a.value ? $("btn-perc-vai") : a).focus(), 50);
+  }
+  function chiudiFormPercorso() {
+    if ($("percorso").hidden) return false;
+    $("percorso").hidden = true;
+    $("btn-percorso").setAttribute("aria-expanded", "false");
+    return true;
+  }
+
+  // Scegli sulla mappa: il riquadro si nasconde, il primo tocco sulla mappa diventa il punto
+  let sceltaSuMappa = null;
+  function iniziaSceltaMappa(id) {
+    sceltaSuMappa = id;
+    chiudiFormPercorso();
+    $("mappa").classList.add("scelta-mappa");
+    toast(id === "perc-da" ? "Tocca la mappa nel punto di partenza" : "Tocca la mappa nel punto di arrivo");
+  }
+  // in cattura, prima di Leaflet: il tocco non apre sentieri né punti
+  $("mappa").addEventListener("click", (e) => {
+    if (!sceltaSuMappa) return;
+    if (e.target.closest && e.target.closest(".leaflet-control, .guida-rotta")) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const ll = mappa.mouseEventToLatLng(e);
+    const id = sceltaSuMappa;
+    sceltaSuMappa = null;
+    $("mappa").classList.remove("scelta-mappa");
+    impostaCampo(id, { lat: +ll.lat.toFixed(6), lon: +ll.lng.toFixed(6), nome: "Punto sulla mappa (" + ll.lat.toFixed(4).replace(".", ",") + "; " + ll.lng.toFixed(4).replace(".", ",") + ")" });
+    apriPercorso();
+  }, true);
+  document.querySelectorAll(".perc-mappa").forEach((b) => b.addEventListener("click", () => iniziaSceltaMappa(b.dataset.campo)));
+
+  function disegnaPercorso() {
+    livelli.percorso.clearLayers();
+    puntoProfilo = null;
+    const p = percorsoAttivo();
+    if (!p) { lineaPercorso = null; return; }
+    L.polyline(p.punti, { color: "#fff", weight: 10, opacity: .9, interactive: false }).addTo(livelli.percorso);
+    lineaPercorso = L.polyline(p.punti, { color: COLORE_PERCORSO, weight: 6, opacity: .95, interactive: false }).addTo(livelli.percorso);
+    const pin = (cls, testo) => L.divIcon({ className: "", html: `<div class="perc-pin ${cls}">${testo}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] });
+    L.marker(p.punti[0], { icon: pin("da", "A"), interactive: false, zIndexOffset: 2500 }).addTo(livelli.percorso);
+    L.marker(p.punti[p.punti.length - 1], { icon: pin("a", "B"), interactive: false, zIndexOffset: 2500 }).addTo(livelli.percorso);
+  }
+
+  // Tutto il percorso sulla mappa, tra la barra (o il riquadro della freccia) in alto e il profilo in basso
+  function inquadraPercorso() {
+    if (!lineaPercorso) return;
+    const gr = $("guida-rotta");
+    const sopra = gr.hidden ? 80 : gr.offsetTop + gr.offsetHeight + 16;
+    stato.seguiGps = false;
+    mappa.fitBounds(lineaPercorso.getBounds(), {
+      paddingTopLeft: [30, sopra], paddingBottomRight: [30, $("percorso-info").offsetHeight + 46], maxZoom: 16
+    });
+  }
+  function tempoPercorso(p) { return QT.tempoStimato(p.metri, p.su || 0, p.giu || 0, (BICI_AB[p.bici] || BICI_AB.mtb).fondo); }
+  function aggiornaModoPercorso() {
+    const p = percorsoAttivo();
+    // il nome del percorso è il titolo del riquadro; la barra in alto compare solo con il riquadro chiuso
+    $("percorso-barra").hidden = !p || !infoChiusa;
+    $("percorso-info").hidden = !p || infoChiusa;
+    document.querySelector(".fab-azioni").classList.toggle("compatte", !!p && !infoChiusa);
+    $("btn-percorso").setAttribute("aria-pressed", String(!!p));
+    if (p) {
+      $("percorso-testo").textContent = `${p.daGps ? "Da qui" : p.da} → ${p.a} · ${QT.formattaKm(p.metri)}`;
+      $("pi-titolo").innerHTML = `<span>${esc(p.daGps ? "Da qui" : p.da)} → ${esc(p.a)}</span><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+      const num = [`<span>${QT.formattaKm(p.metri)}</span>`];
+      if (p.su != null) num.push(`<span>↗ ${p.su} m</span>`);
+      if (p.giu != null) num.push(`<span>↘ ${p.giu} m</span>`);
+      num.push(`<span>${QT.formattaOre(tempoPercorso(p))} <small>stima</small></span>`);
+      if (p.min != null) num.push(`<small>quota ${p.min}–${QT.formattaQuota(p.max)}</small>`);
+      $("pi-num").innerHTML = num.join("");
+      // Percorsi dell'app usati, nell'ordine (tocca per aprire la scheda), e avviso per i tratti su sentiero fuori dai percorsi
+      const u = QT.sentieriUsati(p, p.sentieri || stato.sentieri);
+      p.usati = u.usati;
+      p.seg = u.seg;
+      coloraTratti(p);
+      const kmCorti = (m) => QT.formattaDistanza(m);
+      const righe = [];
+      righe.push(u.usati.length
+        ? `<div class="pi-usati"><span class="pi-etic">Percorsi usati</span>${u.usati.map((x, i) =>
+          `<button type="button" class="pi-sent" data-i="${i}" style="--col:${coloreSentiero(i)}">${segnavia(x.s, 22)}<span>${esc(x.s.r || QT.titoloSentiero(x.s))}</span><small>${kmCorti(x.metri)}</small></button>`).join("")}</div>`
+        : '<p class="pi-nota">Nessun percorso dell\'app su questo tragitto.</p>');
+      if (u.segnatiAltri >= 80) righe.push(`<p class="pi-nota">e ${kmCorti(u.segnatiAltri)} su altri itinerari in bici segnati, fuori dalla zona caricata</p>`);
+      if (u.fuori.sentiero >= 300) {
+        righe.push(`<p class="pi-avviso">⚠ ${kmCorti(u.fuori.sentiero)} su sentieri fuori dai percorsi in bici: possono essere stretti, ripidi o vietati alle bici. Controlla sul posto.</p>`);
+      }
+      const altro = u.fuori.sterrata + u.fuori.strada + (u.fuori.sentiero < 300 ? u.fuori.sentiero : 0);
+      if (altro >= 50) righe.push(`<p class="pi-nota">${kmCorti(altro)} fuori dai percorsi dell'app` +
+        (u.fuori.sterrata >= 50 ? `, di cui ${kmCorti(u.fuori.sterrata)} su sterrato` : "") + "</p>");
+      righe.push(`<p class="pi-nota">${esc((BICI_AB[p.bici] || BICI_AB.mtb).nome)} · calcolato da ${esc(p.fonte || "BRouter")}${p.senzaQuote ? " · quote in arrivo…" : ""}</p>`);
+      $("pi-fondo").innerHTML = righe.join("");
+      disegnaProfilo(p);
+    }
+    posizionaAzioni();
+  }
+  // i pulsanti rotondi in basso a sinistra salgono sopra il riquadro del profilo
+  function posizionaAzioni() {
+    const box = $("percorso-info"), az = document.querySelector(".fab-azioni");
+    if (!az) return;
+    // misurato sullo schermo: sull'iPhone il riquadro sta più in alto per la barra di sistema in basso (safe area)
+    if (box.hidden) { az.style.bottom = ""; return; }
+    const sotto = az.offsetParent.getBoundingClientRect().bottom - box.getBoundingClientRect().top;
+    az.style.bottom = Math.round(sotto + 10) + "px";
+  }
+  window.addEventListener("resize", posizionaAzioni);
+  // il riquadro cambia altezza anche dopo (caratteri che arrivano dopo, avviso che va a capo): i pulsanti lo seguono
+  if (window.ResizeObserver) new ResizeObserver(() => posizionaAzioni()).observe($("percorso-info"));
+  // Croce del riquadro: lo chiude, il percorso resta sulla mappa; si riapre toccando la barra in alto
+  let infoChiusa = false;
+  $("btn-pi-chiudi").addEventListener("click", () => {
+    infoChiusa = true;
+    aggiornaModoPercorso();
+    posizionaAzioni();
+  });
+  $("pi-titolo").addEventListener("click", () => { inquadraPercorso(); apriPercorso(); });
+
+  // ---------- Profilo altimetrico del percorso ----------
+  // Tocca o trascina il dito sul profilo: un pallino mostra quel punto sulla mappa, con distanza e quota.
+  function disegnaProfilo(p) {
+    const box = $("pi-profilo");
+    const serie = QT.serieProfilo(p, 300);
+    if (serie.length < 3) { box.innerHTML = '<p class="pi-asse" style="position:static">Quote non disponibili</p>'; return; }
+    const W = 1000, H = 100, tot = p.dist[p.dist.length - 1] || 1;
+    let min = Math.min(...serie.map((s) => s.q)), max = Math.max(...serie.map((s) => s.q));
+    // almeno 100 m di scala, così un percorso in piano non sembra una montagna
+    if (max - min < 100) { const m = (max + min) / 2; min = m - 50; max = m + 50; }
+    const x = (m) => (m / tot) * W, y = (q) => H - 2 - ((q - min) / (max - min)) * (H - 8);
+    const linea = serie.map((s, i) => (i ? "L" : "M") + x(s.m).toFixed(1) + " " + y(s.q).toFixed(1)).join("");
+    const passoKm = [0.5, 1, 2, 5, 10, 20].find((k) => tot / 1000 / k <= 6) || 50;
+    let griglia = "";
+    for (let k = passoKm; k * 1000 < tot; k += passoKm) griglia += `<path class="griglia" d="M${x(k * 1000).toFixed(1)} 0V${H}"/>`;
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${griglia}` +
+      `<path class="area" d="${linea}L${W} ${H}L0 ${H}Z"/><path class="linea" d="${linea}"/>${pezziColorati(p, serie, x, y)}` +
+      `<path class="cursore" id="pi-cursore" d="M0 0V${H}" visibility="hidden"/></svg>` +
+      `<span class="pi-asse" style="left:0;top:0">${QT.formattaQuota(Math.round(max))}</span>` +
+      `<span class="pi-asse" style="left:0;bottom:0">${QT.formattaQuota(Math.round(min))}</span>` +
+      `<span class="pi-asse" style="right:0;bottom:0">${QT.formattaKm(tot)}</span>` +
+      `<span class="pi-etichetta" id="pi-etichetta" hidden></span>`;
+  }
+  // Il profilo colorato come i sentieri: un pezzo di linea per ogni tratto sullo stesso sentiero
+  function pezziColorati(p, serie, x, y) {
+    if (!p.seg) return "";
+    const kDi = (s) => { const a = p.seg[s.i], b = p.seg[s.i + 1]; return a != null && a >= 0 ? a : (b != null ? b : -1); };
+    let out = "", da = 0;
+    for (let n = 1; n <= serie.length; n++) {
+      if (n < serie.length && kDi(serie[n]) === kDi(serie[da])) continue;
+      const k = kDi(serie[da]);
+      if (k >= 0) {
+        const pezzo = serie.slice(da, Math.min(n + 1, serie.length));
+        const d = pezzo.map((s, j) => (j ? "L" : "M") + x(s.m).toFixed(1) + " " + y(s.q).toFixed(1)).join("");
+        out += `<path class="linea" style="stroke:${coloreSentiero(k)};stroke-width:3.5" d="${d}"/>`;
+      }
+      da = n;
+    }
+    return out;
+  }
+  function puntoDelProfilo(e) {
+    const p = percorsoAttivo();
+    if (!p) return;
+    const box = $("pi-profilo"), r = box.getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    const tot = p.dist[p.dist.length - 1], m = f * tot;
+    let i = 0;
+    while (i < p.dist.length - 1 && p.dist[i + 1] <= m) i++;
+    const cur = $("pi-cursore"), et = $("pi-etichetta");
+    if (cur) { cur.setAttribute("d", `M${(f * 1000).toFixed(1)} 0V100`); cur.setAttribute("visibility", "visible"); }
+    if (et) {
+      et.hidden = false;
+      et.textContent = QT.formattaKm(p.dist[i]) + (p.quote[i] != null ? " · " + QT.formattaQuota(p.quote[i]) : "");
+      et.style.left = Math.max(40, Math.min(r.width - 40, f * r.width)) + "px";
+    }
+    const pt = p.punti[i];
+    if (!puntoProfilo) {
+      puntoProfilo = L.marker(pt, { icon: L.divIcon({ className: "", html: '<div class="perc-pin qui"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: false, zIndexOffset: 2600 }).addTo(livelli.percorso);
+    } else puntoProfilo.setLatLng(pt);
+    if (!mappa.getBounds().pad(-0.1).contains(pt)) { stato.seguiGps = false; mappa.panTo(pt); }
+  }
+  {
+    const box = $("pi-profilo");
+    let premuto = false;
+    box.addEventListener("pointerdown", (e) => { premuto = true; try { box.setPointerCapture(e.pointerId); } catch (x) { /* ignora */ } puntoDelProfilo(e); });
+    box.addEventListener("pointermove", (e) => { if (premuto || e.pointerType === "mouse") puntoDelProfilo(e); });
+    const fine = () => { premuto = false; };
+    box.addEventListener("pointerup", fine);
+    box.addEventListener("pointercancel", fine);
+    L.DomEvent.disableClickPropagation($("percorso-info"));
+    L.DomEvent.disableScrollPropagation($("percorso-info"));
+  }
+
+  // Esce dal percorso in bici (e dalla sua navigazione)
+  function chiudiPercorso() {
+    if (!stato.percorso) return;
+    stato.percorso = null;
+    disegnaPercorso();
+    if (scelto && scelto.percorso) scegliSentiero(null, true);
+    aggiornaModoPercorso();
+  }
+
+  // Percorsi dell'app lungo tutto il tragitto (anche fuori dal raggio caricato), dalle tessere del sito
+  async function sentieriLungoPercorso(p) {
+    try {
+      const ind = await leggiIndice();
+      if (!ind || !ind.tessere) return null;
+      const passo = ind.passo || 0.1, nomi = new Set();
+      p.punti.forEach(([la, lo]) => {
+        for (const d of [-0.002, 0.002]) nomi.add(`t_${Math.floor((la + d) / passo)}_${Math.floor((lo + d) / passo)}.json`);
+      });
+      const r = await daTessere(new Set(ind.tessere), [...nomi]);
+      const visti = new Set(r.sentieri.map((x) => x.i));
+      return r.sentieri.concat(stato.sentieri.filter((x) => !visti.has(x.i)));
+    } catch (e) { console.warn("Sentieri lungo il percorso", e); return null; }
+  }
+
+  // Avvia il percorso: la linea sulla mappa, il profilo in basso e la navigazione con la freccia
+  function avviaPercorso(r, da, a, bici) {
+    infoChiusa = false;
+    stato.percorso = Object.assign(r, { da: da.nome, daGps: !!da.gps, a: a.nome, bici });
+    disegnaPercorso();
+    aggiornaModoPercorso();
+    chiudiAnteprima();
+    stato.seguiGps = false;
+    // per la freccia il percorso è un "sentiero" con una sola linea, già disegnato qui
+    if (r.senzaQuote) quoteOsrm(r).catch((e) => console.warn("Quote del percorso", e)).finally(() => {
+      r.senzaQuote = false;
+      if (stato.percorso === r) aggiornaModoPercorso();
+    });
+    sentieriLungoPercorso(r).then((lista) => {
+      if (!lista || stato.percorso !== r) return;
+      r.sentieri = lista;
+      aggiornaModoPercorso();
+    });
+    stato.percorso.sentiero = { i: "percorso", percorso: true, g: [r.punti], d: "ND", l: r.metri, n: da.nome + " → " + a.nome };
+    scegliSentiero(stato.percorso.sentiero);
+    inquadraPercorso();
+    if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: "percorso-bici-" + bici, title: "Percorso in bici " + BICI_AB[bici].nome, event: true });
+  }
+
+  $("percorso").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const cDa = puntoCampo("perc-da"), cA = puntoCampo("perc-a");
+    if (!cA) { $("perc-a").focus(); return; }
+    const bici = $("perc-bici").value === "bici" ? "bici" : "mtb";
+    salvaPref("percDa", JSON.stringify(cDa)); salvaPref("percA", JSON.stringify(cA)); salvaPref("percBici", bici);
+    const vai = $("btn-perc-vai");
+    const avviso = (t) => { $("perc-errore").textContent = t; $("perc-errore").hidden = !t; };
+    avviso("");
+    vai.disabled = true;
+    vai.textContent = "Calcolo il percorso…";
+    try {
+      let da;
+      if (!cDa || (cDa.testo && /^(la )?mia posizione$|^qui$/i.test(cDa.testo))) {
+        if (!stato.gps) { avviso("Posizione non ancora disponibile: scrivi anche da dove parti o sceglilo sulla mappa."); return; }
+        da = { lat: stato.gps.lat, lon: stato.gps.lon, nome: "la tua posizione", gps: true };
+      } else {
+        da = cDa.lat != null ? cDa : await geocodifica(cDa.testo);
+        if (!da) { avviso("Partenza non trovata. Prova ad aggiungere il paese o sceglila sulla mappa."); return; }
+      }
+      const a = cA.lat != null ? cA : await geocodifica(cA.testo);
+      if (!a) { avviso("Arrivo non trovato. Prova ad aggiungere il paese o sceglilo sulla mappa."); return; }
+      if (QT.distanza(da.lat, da.lon, a.lat, a.lon) > 300000) { avviso("Partenza e arrivo sono a più di 300 km: troppo lontano per un percorso in bici. Controlla i nomi."); return; }
+      let r;
+      try { r = await calcolaPercorso(da, a, bici); }
+      catch (err) {
+        console.warn("Percorso in bici", err);
+        avviso(navigator.onLine === false ? "Senza rete il percorso non si può calcolare."
+          : "Non trovo un percorso in bici tra questi due punti. Prova a spostarli vicino a una strada o a un sentiero.");
+        return;
+      }
+      chiudiFormPercorso();
+      avviaPercorso(r, da, a, bici);
+    } catch (err) {
+      console.warn("Percorso non calcolato", err);
+      avviso("Non riesco a calcolare il percorso. Controlla la connessione e riprova.");
+    } finally {
+      vai.disabled = false;
+      vai.textContent = "Calcola il percorso";
+    }
+  });
+  $("btn-percorso").addEventListener("click", () => { if (!chiudiFormPercorso()) apriPercorso(); });
+  $("btn-chiudi-form-percorso").addEventListener("click", chiudiFormPercorso);
+  $("percorso-testo").addEventListener("click", () => {
+    // con il riquadro chiuso, il primo tocco lo riapre; poi apre il modulo per cambiare il percorso
+    if (infoChiusa) { infoChiusa = false; aggiornaModoPercorso(); inquadraPercorso(); return; }
+    inquadraPercorso();
+    apriPercorso();
+  });
+  $("btn-esci-percorso").addEventListener("click", () => { chiudiFormPercorso(); chiudiPercorso(); });
+  $("btn-perc-inverti").addEventListener("click", () => {
+    const da = puntoCampo("perc-da"), a = puntoCampo("perc-a");
+    impostaCampo("perc-da", a); impostaCampo("perc-a", da);
+  });
+  $("pi-fondo").addEventListener("click", (e) => {
+    const b = e.target.closest(".pi-sent");
+    const p = percorsoAttivo();
+    if (b && p && p.usati && p.usati[+b.dataset.i]) mostraSentiero(p.usati[+b.dataset.i].s);
+  });
+  $("btn-perc-gpx").addEventListener("click", () => {
+    const p = percorsoAttivo();
+    if (!p) return;
+    const nome = (p.daGps ? "Percorso" : p.da) + " - " + p.a;
+    consegnaFile(QT.fileTraccia([p.punti], nome, "gpx", { fonte: "Percorso in bici calcolato da " + (p.fonte || "BRouter") + ", dati © OpenStreetMap" }), QT.nomeFile(nome, "gpx"), QT.FORMATI.gpx.tipo);
+    if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: "percorso-bici-gpx", title: "Percorso in bici GPX", event: true });
+  });
+  // «In bici fin qui» dalla scheda di un punto
+  $("scheda-contenuto").addEventListener("click", (e) => {
+    const b = e.target.closest(".pop-inbici");
+    if (!b) return;
+    impostaCampo("perc-a", { lat: +b.dataset.lat, lon: +b.dataset.lon, nome: b.dataset.nome });
+    if (!$("perc-da").value.trim() || $("perc-da").dataset.lat) impostaCampo("perc-da", null);
+    chiudiScheda();
+    apriPercorso();
+  });
+
 
   function suPosizione(p) {
     const { latitude: lat, longitude: lon, accuracy: acc } = p.coords;
@@ -1511,6 +1791,24 @@
   }
 
   // ---------- Ricerca luogo ----------
+  // ---------- Ricerca luogo (finestra "Vai a") ----------
+  function apriVai() {
+    chiudiFormPercorso();
+    $("form-cerca").hidden = false;
+    $("btn-vai").setAttribute("aria-expanded", "true");
+    setTimeout(() => $("cerca-indirizzo").focus(), 50);
+  }
+  function chiudiVai() {
+    if ($("form-cerca").hidden) return false;
+    $("form-cerca").hidden = true;
+    $("btn-vai").setAttribute("aria-expanded", "false");
+    return true;
+  }
+  $("btn-vai").addEventListener("click", () => { if (!chiudiVai()) apriVai(); });
+  $("btn-chiudi-vai").addEventListener("click", chiudiVai);
+  L.DomEvent.disableClickPropagation($("form-cerca"));
+  L.DomEvent.disableClickPropagation($("percorso"));
+  L.DomEvent.disableClickPropagation($("percorso-barra"));
   $("form-cerca").addEventListener("submit", async (e) => {
     e.preventDefault();
     const q = $("cerca-indirizzo").value.trim();
@@ -1522,6 +1820,7 @@
       if (!primo) { messaggio("Luogo non trovato. Prova ad aggiungere il comune o la provincia.", true); return; }
       stato.seguiGps = false;
       $("cerca-indirizzo").blur();
+      chiudiVai();
       impostaCentro(+primo.lat, +primo.lon, false);
     } catch (err) {
       messaggio("Ricerca non riuscita. Controlla la connessione.", true);
@@ -1601,6 +1900,14 @@
   }
   $("cat-tipi").addEventListener("change", cambiaCategoria);
   $("cat-sentieri").addEventListener("change", cambiaCategoria);
+  // Numero dei percorsi (segnavia) sulla mappa: dove i percorsi sono fitti si può spegnere; resta salvato sul telefono
+  $("numeri-segno").innerHTML = QT.svgSimbolo(QT.SIMBOLO_CAI, 28, "123");
+  $("mostra-numeri").checked = mostraNumeri;
+  $("mostra-numeri").addEventListener("change", (e) => {
+    mostraNumeri = e.target.checked;
+    salvaPref("numeri", mostraNumeri ? "1" : "0");
+    render();
+  });
   $("cat-voci").addEventListener("change", cambiaCategoria);
   function apriCategorie(apri) {
     $("cat-menu").hidden = !apri;
@@ -1667,7 +1974,7 @@
       A: ": colonnina pubblica con attrezzi e spesso una pompa, sempre disponibile.",
       N: ": negozio di bici o officina per le riparazioni (a volte anche noleggio).",
       C: ": punto di ricarica per e-bike.",
-      R: ": rifugio dove mangiare e bere nella stagione di apertura.",
+      R: ": rifugio dove mangiare e bere nella stagione di apertura. Se c'è una webcam a meno di 300 metri, la scheda ne mostra l'immagine o il link.",
       L: ": bar, ristorante, pub o agriturismo a meno di 300 metri da un percorso. Si vedono scegliendo “Bar e ristoranti” nel menu; nella scheda di ogni percorso c'è l'elenco di quelli lungo il tracciato.",
       F: ": funivia, cabinovia, seggiovia o funicolare. Sulla mappa è una linea scura dalla stazione a valle (dove sta il simbolo) a quella a monte; nella scheda c'è scritto se si può salire con la bici. Si vedono scegliendo “Funivie e seggiovie” nel menu."
     }[k] || "."}</div></li>`).join("");
@@ -1698,8 +2005,7 @@
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("cat-menu").hidden) { apriCategorie(false); $("categoria").focus(); return; }
-    if (chiudiFormPercorso()) { $("btn-percorso").focus(); return; }
-    if (!chiudiGuida() && !chiudiScheda()) chiudiElenco();
+    if (!chiudiGuida() && !chiudiScheda() && !chiudiFormPercorso() && !chiudiVai()) chiudiElenco();
   });
 
   // ---------- Lettura vocale dei riquadri ----------
@@ -1787,6 +2093,15 @@
   }
   document.addEventListener("visibilitychange", aggiornaSchermoAcceso);
   document.addEventListener("pointerdown", () => { if (autoAttivo && !bloccoSchermo) aggiornaSchermoAcceso(); }, { passive: true });
+
+  // Riassunto delle impostazioni sul pulsante chiuso, es. "refresh spento · Topografica"
+  function riassuntoImpostazioni() {
+    const testo = (id) => { const s = $(id); return s && s.selectedOptions[0] ? s.selectedOptions[0].textContent : ""; };
+    const auto = $("auto-refresh").value === "0" ? "refresh spento" : $("auto-refresh").value + " s";
+    $("imp-riassunto").textContent = [auto, testo("sfondo")].join(" · ");
+  }
+  for (const id of ["auto-refresh", "suoni", "sfondo", "lettura"]) $(id).addEventListener("change", riassuntoImpostazioni);
+  setTimeout(riassuntoImpostazioni, 0);
 
   // All'avvio l'auto-refresh è sempre quello di config.js (0 = spento): l'app riparte dall'ultima posizione e non la sposta
   const secAuto = [0, 30, 60, 120].includes(+cfg.autoRefreshSecondi) ? +cfg.autoRefreshSecondi : 0;

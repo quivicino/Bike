@@ -40,6 +40,9 @@ funzionamento di [Qui-Trekking](https://github.com/quivicino/Trekking) e delle a
   *Pubblica sito e aggiorna percorsi* → *Run workflow*.
 - Alla fine dello scaricamento arriva una notifica con l'app **ntfy** se nel repository c'è il secret `NTFY_TOPIC`.
 - L'ultima risposta resta sul telefono (IndexedDB): senza campo l'app usa quella.
+- **webcam** (link in `contact:webcam`, `webcam` o `url:webcam`, su un oggetto a sé o sul rifugio stesso): non sono punti sulla mappa,
+  ma finiscono nel campo `wc` dei rifugi a meno di **300 m** (`associaWebcam` in `core.js`; osm_bike.py le tiene nella copia).
+  Nella scheda il riquadro «Webcam qui vicino» mostra l'immagine se il link è un'immagine su https, altrimenti un pulsante.
 - Toccando un percorso si apre la sua **scheda**; da lì: navigazione sul percorso (velocità e freccia), «In auto alla partenza»,
   Street View agli estremi, **Scarica il percorso** (GPX, KML, GeoJSON, dal sito MTB o cycling di Waymarked Trails) e
   **Invia Percorso con WhatsApp** (link `?s=percorso&c=centro&v=lat,lon,zoom&r=raggio&k=cosa mostrare&f=filtri&o=ordine&b=mappa`).

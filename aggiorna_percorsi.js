@@ -175,6 +175,12 @@ function salva(raccolta, zona, coperte = ZONE, datiOsm = null) {
   const vicini = QT.vicinoAiSentieri(vicinoA, (function* () { for (const s of percorsi) yield* s.g; })(), QT.RAGGIO_RISTORO + 10);
   for (const p of vicinoA) if (!vicini.has(p.i)) raccolta.punti.delete(p.i);
   console.log(`Bar, ristoranti e fontanelle vicino ai percorsi: ${vicini.size} (scartati ${vicinoA.length - vicini.size})`);
+  // Webcam: non si salvano come punti, ma nei rifugi a meno di 300 m (campo "wc")
+  const tutti = [...raccolta.punti.values()];
+  const nCam = tutti.filter((p) => p.k === "V").length;
+  raccolta.punti = new Map(QT.associaWebcam(tutti).map((p) => [p.i, p]));
+  const conCam = [...raccolta.punti.values()].filter((p) => p.wc).length;
+  console.log(`Webcam: ${nCam} trovate, ${conCam} rifugi con una webcam a meno di ${QT.RAGGIO_WEBCAM} m`);
   for (const s of percorsi) {
     const casa = nomeTessera(s.g[0][0][0], s.g[0][0][1]);
     prendi(casa).s.push(s);

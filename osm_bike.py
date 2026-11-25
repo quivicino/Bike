@@ -48,6 +48,10 @@ FILTRO = [("route", "mtb"), ("route", "bicycle"), ("amenity", "drinking_water"),
           ("tourism", "alpine_hut"), ("amenity", "restaurant"), ("amenity", "cafe"), ("amenity", "bar"),
           ("amenity", "pub"), ("agriturismo", "yes"), ("guest_house", "agritourism"), ("aerialway", "cable_car"),
           ("aerialway", "gondola"), ("aerialway", "mixed_lift"), ("aerialway", "chair_lift"), ("railway", "funicular")]
+# webcam (link in uno di questi tag): non sono punti sulla mappa, finiscono nei rifugi a meno di 300 m (associaWebcam)
+CHIAVI_WEBCAM = ("contact:webcam", "webcam", "url:webcam")
+COPPIE = set(FILTRO)
+CHIAVI = sorted({k for k, _ in FILTRO} | set(CHIAVI_WEBCAM))
 SOLO_VICINO = {"L", "W"}            # tenuti solo vicino ai percorsi
 CELLA = 0.005                      # griglia per il filtro grossolano «vicino ai percorsi» (circa 550 × 400 m)
 SCRIPT_URL = "https://raw.githubusercontent.com/quivicino/Bike/main/osm_bike.py"
@@ -62,6 +66,27 @@ def tipo_impianto(t):
     if t.get("railway") == "funicular" or t.get("aerialway") in ("cable_car", "gondola", "mixed_lift", "chair_lift"):
         return "F"
     return None
+
+
+def link_webcam(t):
+    """Come linkWebcam in core.js: il primo link http(s) di una webcam, se c'è."""
+    for c in CHIAVI_WEBCAM:
+        v = (t.get(c) or "").split(";")[0].strip()
+        if v.lower().startswith(("http://", "https://")) and " " not in v:
+            return v
+    return None
+
+
+def tipo_o_webcam(t):
+    """Il tipo del punto, "V" per una webcam da sola, None se l'oggetto non serve."""
+    return tipo_punto(t) or ("V" if link_webcam(t) else None)
+
+
+def serve_nel_ritaglio(tags):
+    for tag in tags:
+        if (tag.k, tag.v) in COPPIE or (tag.k in CHIAVI_WEBCAM and tag.v.lower().startswith("http")):
+            return True
+    return False
 
 
 def tipo_punto(t):
@@ -115,14 +140,14 @@ class VieEPunti(osmium.SimpleHandler):
         self.punti = []
 
     def node(self, n):
-        if not n.tags or not tipo_punto(n.tags):
+        if not n.tags or not tipo_o_webcam(n.tags):
             return
         self.punti.append({"type": "node", "id": n.id, "lat": round(n.location.lat, 7),
                            "lon": round(n.location.lon, 7), "tags": {k.k: k.v for k in n.tags}})
 
     def way(self, w):
         serve = w.id in self.cercate
-        punto = bool(w.tags) and tipo_punto(w.tags)
+        punto = bool(w.tags) and tipo_o_webcam(w.tags)
         if not serve and not punto:
             return
         coord = []
@@ -203,8 +228,10 @@ def ritaglia(pbf, filtrato):
     """Piccolo PBF con gli oggetti di FILTRO e tutte le vie e i nodi a cui rimandano (con i loro tag)."""
     w = osmium.BackReferenceWriter(filtrato, ref_src=pbf, overwrite=True, remove_tags=False)
     try:
-        for o in osmium.FileProcessor(pbf).with_filter(osmium.filter.TagFilter(*FILTRO)):
-            w.add(o)
+        # filtro veloce per chiave (in C++), poi le coppie chiave=valore e i link delle webcam
+        for o in osmium.FileProcessor(pbf).with_filter(osmium.filter.KeyFilter(*CHIAVI)):
+            if serve_nel_ritaglio(o.tags):
+                w.add(o)
     finally:
         w.close()
     print(f"PBF ritagliato: {os.path.getsize(filtrato) / 1048576:.1f} MB", flush=True)
