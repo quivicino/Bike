@@ -767,3 +767,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pop .pop-ab button.pop-vai, .pop-ab button.pop-vai { width: 100%; border: 0; margin-top: 10px; font-size: 18px; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .pop-ab .pop-ab-gpx { background: var(--superficie); color: var(--blu); border: 2px solid var(--blu) !important; }
 @media (prefers-reduced-motion: reduce) { .percorso { animation: none; } }
+
+/* ---- Webcam vicino ai rifugi ---- */
+.pop-webcam-box { margin: 10px 0; }
+.pop-webcam-box > b { display: block; font: 700 13px var(--font-body); color: var(--testo-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.pop-webcam { margin: 0 0 10px; }
+.pop-webcam img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; background: var(--bg); }
+.pop-webcam figcaption { font-size: 14px; color: var(--testo-2); margin-top: 4px; }
+.pop-webcam .rotta-testo { display: none; font-size: 14px; color: var(--testo-2); margin: 0; }
+.pop-webcam.rotta a:first-child, .pop-webcam.rotta figcaption { display: none; }
+.pop-webcam.rotta .rotta-testo { display: block; }
+.pop-webcam-link { display: block; padding: 10px 12px; margin: 0 0 8px; border-radius: 12px; background: var(--bg); color: var(--testo); font-weight: 700; text-decoration: none; }
+.pop-webcam-link span { display: block; font-weight: 400; font-size: 13px; color: var(--testo-2); }
