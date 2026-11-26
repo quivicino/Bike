@@ -17,23 +17,23 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <div class="brand" aria-label="Qui-Bike">
         <img class="logo" src="icon-192.png?v=2" alt="" width="50" height="50">
-        <span class="brand-name">Qui-Bike</span>
+        <span class="brand-name">Qui Bike</span>
       </div>
-      <button class="barra-btn" id="btn-vai" type="button" aria-controls="form-cerca" aria-expanded="false">Vai a</button>
-      <button class="barra-btn" id="btn-percorso" type="button" title="Percorso in bici da A a B" aria-controls="percorso" aria-expanded="false" aria-pressed="false">Percorso</button>
+      <button class="barra-btn" id="btn-vai" type="button" aria-controls="form-cerca" aria-expanded="false">Cerca</button>
+      <button class="barra-btn" id="btn-percorso" type="button" title="Indicazioni: percorso in bici da A a B" aria-controls="percorso" aria-expanded="false" aria-pressed="false">Indicazioni</button>
       <div class="carb" id="cat-box">
         <button class="cat-btn" id="categoria" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="cat-menu">
-          <span class="sr-only">Cosa mostrare: </span><span id="categoria-testo">Cosa mostrare</span>
+          <span id="categoria-testo">Filtra</span><span class="sr-only">: <span id="categoria-riassunto"></span></span><span class="cat-badge" id="categoria-badge" aria-hidden="true" hidden></span>
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="cat-menu" id="cat-menu" role="group" aria-label="Cosa mostrare: puoi sceglierne più di uno" hidden>
+        <div class="cat-menu" id="cat-menu" role="group" aria-label="Filtra: puoi sceglierne più di uno" hidden>
           <p class="cat-titolo">Tipo di percorso</p>
           <div id="cat-tipi"></div>
           <p class="cat-titolo">Difficoltà</p>
@@ -93,7 +93,7 @@
 
       <form class="percorso vai" id="form-cerca" role="search" aria-labelledby="vai-titolo" hidden>
         <div class="percorso-testa">
-          <h2 id="vai-titolo">Vai a</h2>
+          <h2 id="vai-titolo">Cerca un luogo</h2>
           <button class="chiudi" id="btn-chiudi-vai" type="button" aria-label="Chiudi">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
           </button>
@@ -106,7 +106,7 @@
 
       <form class="percorso" id="percorso" aria-labelledby="percorso-titolo" hidden>
         <div class="percorso-testa">
-          <h2 id="percorso-titolo">Percorso in bici</h2>
+          <h2 id="percorso-titolo">Indicazioni in bici</h2>
           <button class="chiudi" id="btn-chiudi-form-percorso" type="button" aria-label="Chiudi">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
           </button>
@@ -338,9 +338,9 @@
         <section id="g-pulsanti">
           <h3>I pulsanti</h3>
           <ul class="g-lista">
-            <li><span class="g-segno"><span class="g-barra corto">Vai a</span></span><div><b>Vai a</b>: apre la ricerca; scrivi un paese o una valle e tocca <b>Cerca</b> per vedere i percorsi lì invece che intorno a te. Se il luogo si trova, la finestra si chiude da sola; la <b>X</b> la chiude senza cercare.</div></li>
-            <li><span class="g-segno"><span class="g-barra corto">Percorso</span></span><div><b>Percorso</b>: il percorso in bici da A a B, con il profilo altimetrico (vedi <i>Da A a B</i>).</div></li>
-            <li><span class="g-segno"><span class="g-barra corto">Percorsi</span></span><div><b>Cosa mostrare</b>: spunta i tipi di percorso (MTB, gravel, strada), le difficoltà e i tipi di punti che vuoi vedere. Un percorso compare se sono spuntati sia il suo tipo sia la sua difficoltà. All'inizio sono spenti ricariche, rifugi, <b>bar e ristoranti</b> e <b>funivie e seggiovie</b> (nella scheda c'è scritto se si sale con la bici). Sotto le difficoltà c'è <b>Numero dei percorsi sulla mappa</b>: toglilo dove i percorsi sono così fitti che i numeri coprono la mappa.</div></li>
+            <li><span class="g-segno"><span class="g-barra corto">Cerca</span></span><div><b>Cerca</b>: apre la ricerca; scrivi un paese o una valle e tocca il pulsante <b>Cerca</b> per vedere i percorsi lì invece che intorno a te. Se il luogo si trova, la finestra si chiude da sola; la <b>X</b> la chiude senza cercare.</div></li>
+            <li><span class="g-segno"><span class="g-barra corto">Indicazioni</span></span><div><b>Indicazioni</b>: il percorso in bici da A a B, con il profilo altimetrico (vedi <i>Da A a B</i>).</div></li>
+            <li><span class="g-segno"><span class="g-barra corto">Filtra</span></span><div><b>Filtra</b> (il pallino rosso dice quanti tipi di punti hai scelto): spunta i tipi di percorso (MTB, gravel, strada), le difficoltà e i tipi di punti che vuoi vedere. Un percorso compare se sono spuntati sia il suo tipo sia la sua difficoltà. All'inizio sono spenti ricariche, rifugi, <b>bar e ristoranti</b> e <b>funivie e seggiovie</b> (nella scheda c'è scritto se si sale con la bici). Sotto le difficoltà c'è <b>Numero dei percorsi sulla mappa</b>: toglilo dove i percorsi sono così fitti che i numeri coprono la mappa.</div></li>
             <li><span class="g-segno"><span class="g-barra corto">15 km</span></span><div><b>Raggio</b>: quanto lontano cercare, da 2 a 25 km.</div></li>
             <li><span class="g-segno"><span class="g-fab"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/></svg></span></span><div><b>Posizione</b>: riporta la mappa su di te e la fa seguire mentre ti sposti. All'avvio l'app riparte dall'ultima zona che guardavi.</div></li>
             <li><span class="g-segno"><span class="g-fab nero"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.6" fill="currentColor"/><circle cx="4.5" cy="12" r="1.6" fill="currentColor"/><circle cx="4.5" cy="18" r="1.6" fill="currentColor"/></svg></span></span><div><b>Elenco</b>: apre la pagina con tutti i percorsi e i punti vicini e le impostazioni.</div></li>
@@ -355,7 +355,7 @@
 
         <section id="g-ab">
           <h3>Percorso in bici da A a B</h3>
-          <p>Tocca <b>Percorso</b> nella barra in alto e scrivi da dove parti e dove vuoi arrivare: un paese, un rifugio, un indirizzo,
+          <p>Tocca <b>Indicazioni</b> nella barra in alto e scrivi da dove parti e dove vuoi arrivare: un paese, un rifugio, un indirizzo,
             oppure le coordinate. Se lasci vuota la partenza si parte dalla tua posizione. Con il pulsante <b>segnaposto</b> accanto a
             ogni casella scegli il punto toccando la mappa. Nella scheda di un punto, <b>In bici fin qui</b> lo mette come arrivo.</p>
           <ul>
@@ -437,9 +437,9 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="config.js?v=10"></script>
+  <script src="config.js?v=11"></script>
   <script src="core.js?v=4"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
   <script src="installa.js?v=2"></script>
 
   <!-- Statistiche d'uso anonime, senza cookie: https://quibike.goatcounter.com
