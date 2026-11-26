@@ -909,3 +909,30 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .impostazioni[open] > summary small { display: none; }
 .impostazioni-righe { display: flex; flex-direction: column; gap: 8px; padding: 0 8px 8px; }
 .impostazioni-righe .auto { background: var(--superficie); }
+
+/* ---- Grafica come il modello di Paolo (26/11): pulsanti della barra traslucidi, «Filtra» con pallino rosso, pulsanti in basso più piccoli ---- */
+.barra-btn, .raggio select, .cat-btn {
+  background: rgba(255,255,255,.2); color: #fff; box-shadow: none; border-radius: 8px; font-weight: 600;
+}
+.barra-btn { flex: 1 1 0; text-align: center; }
+#btn-vai, #btn-percorso { flex: 1 1 0; min-width: 0; }
+.barra-btn[aria-expanded="true"], .barra-btn[aria-pressed="true"] { background: #fff; color: #6f22d6; }
+.cat-btn { position: relative; overflow: visible; }
+.cat-badge {
+  position: absolute; top: -7px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  background: #e53935; color: #fff; font: 700 10px/18px var(--font-body); text-align: center; box-shadow: 0 0 0 1.5px rgba(255,255,255,.9);
+}
+.cat-badge[hidden] { display: none; }
+.pill-azione {
+  height: 42px; padding: 0 18px; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  font: 700 16px/1 var(--font-body); letter-spacing: 0; -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.pill-azione.officina { background: #f08a1c; }
+.pill-azione.acqua { background: #1e88e5; }
+.fab-azioni { gap: 10px; }
+@media (max-width: 480px) {
+  .pill-azione { height: 36px; padding: 0 14px; font-size: 14px; }
+  .fab-azioni { bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+  .barra-btn { font-size: 13px; padding: 0 6px; }
+  .raggio select, .cat-btn { font-size: 13px; }
+}

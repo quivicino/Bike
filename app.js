@@ -1119,7 +1119,7 @@
       li.className = "vuoto";
       li.textContent = stato.caricando ? "Scarico i dati…" : stato.filtri.size
         ? "Niente con questi filtri. Prova a toglierne uno o ad allargare il raggio."
-        : "Nessun percorso o punto scelto in questo raggio. Prova ad allargarlo o a scegliere altro in “Cosa mostrare”.";
+        : "Nessun percorso o punto scelto in questo raggio. Prova ad allargarlo o a scegliere altro in “Filtra”.";
       ol.appendChild(li);
       return;
     }
@@ -1888,7 +1888,12 @@
     let testo = parti.join(" ");
     if (punti.length === 1) testo = testo ? testo + " +1" : BREVE[punti[0]];
     else if (punti.length) testo = testo ? testo + " +" + punti.length : punti.length + " punti";
-    $("categoria-testo").textContent = testo || "Nessuno";
+    // sul pulsante «Filtra» il pallino rosso conta i tipi di punti scelti; il riassunto completo resta nel titolo
+    $("categoria-riassunto").textContent = testo || "niente";
+    $("categoria").title = "Filtra: " + (testo || "niente scelto");
+    const nb = $("categoria-badge");
+    nb.textContent = punti.length ? "+" + punti.length : "0";
+    nb.hidden = !!(tipi.length && diff.length) && !punti.length;
   }
   scriviCategorie();
   function cambiaCategoria(e) {
